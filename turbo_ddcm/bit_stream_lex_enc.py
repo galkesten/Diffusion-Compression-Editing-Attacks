@@ -8,7 +8,14 @@ class BitStreamEncoder:
         self.M = M
         self.C = C
 
-        self.bits_for_rank = math.ceil(math.log2(math.comb(K, M)))
+        print(f"[BitStreamEncoder] Computing bits_for_rank: comb({K}, {M})...")
+        try:
+            self.bits_for_rank = math.ceil(math.log2(math.comb(K, M)))
+            print(f"[BitStreamEncoder] bits_for_rank = {self.bits_for_rank} bits")
+        except (OverflowError, ValueError) as e:
+            print(f"[BitStreamEncoder] ERROR: Cannot compute comb({K}, {M}) - {e}")
+            print(f"[BitStreamEncoder] M={M} is too large! Try a smaller M value (e.g., M <= 50)")
+            raise ValueError(f"M={M} is too large. The combination comb({K}, {M}) cannot be computed.")
         self.bits_for_coeff = self.C # bits for one coeff
         
         self.device = device
@@ -19,9 +26,16 @@ class BitStreamEncoder:
         if use_precomputed_combs:
             full_path = BitStreamEncoder.get_pkl_full_path(K, M, to_base_path)
             if not os.path.exists(full_path):
+                print(f"[BitStreamEncoder] Precomputed table not found for K={K}, M={M}")
+                print(f"[BitStreamEncoder] Computing combination table... This may take a while for large M values.")
+                print(f"[BitStreamEncoder] Table size: {K} x {M} = {K * M:,} entries")
                 BitStreamEncoder.precompute_comb_table(K, M, C, to_base_path)
+                print(f"[BitStreamEncoder] Combination table computed and saved to {full_path}")
+            else:
+                print(f"[BitStreamEncoder] Loading precomputed table from {full_path}")
             with open(full_path, "rb") as f:
                 self.combs_table = pickle.load(f)['table']
+                print(f"[BitStreamEncoder] Table loaded successfully ({len(self.combs_table)} x {len(self.combs_table[0]) if self.combs_table else 0})")
 
     def _compute_rank(self, comb: list[int]) -> int:
         rank = 0
@@ -104,21 +118,39 @@ class BitStreamEncoder:
     @staticmethod
     def precompute_comb_table(K: int, M: int, C, to_base_path='.'):
         full_path = BitStreamEncoder.get_pkl_full_path(K, M, to_base_path)
+        print(f"[Precompute] Creating table of size {K} x {M} = {K * M:,} entries...")
         table = [[0 for i in range(M)] for x in range(K)]
+        
+        total_entries = K * M
+        entries_computed = 0
+        last_progress = 0
     
         for x in range(K):
+            if x % 100 == 0 or x == K - 1:  # Print progress every 100 rows
+                progress = int((entries_computed / total_entries) * 100)
+                if progress != last_progress:
+                    print(f"[Precompute] Progress: {progress}% ({entries_computed:,}/{total_entries:,} entries)")
+                    last_progress = progress
             for i in range(M):
                 n = K - x - 1
                 k = M - i - 1
                 if n >= 0 and k >= 0 and n >= k:
-                    table[x][i] = math.comb(n, k)
+                    try:
+                        table[x][i] = math.comb(n, k)
+                    except (OverflowError, ValueError) as e:
+                        print(f"[Precompute] ERROR at x={x}, i={i}: {e}")
+                        print(f"[Precompute] Attempting to compute comb({n}, {k}) - number too large!")
+                        raise
                 else:
                     table[x][i] = 0
+                entries_computed += 1
     
+        print(f"[Precompute] Saving table to {full_path}...")
         with open(full_path, 'wb') as f:
             pickle.dump({
                 'K': K,
                 'M': M,
                 'table': table
             }, f)
+        print(f"[Precompute] Table saved successfully!")
     

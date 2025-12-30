@@ -14,7 +14,7 @@ class TurboDDCM():
         self.seed = seed
         self.torch_dtype = torch.float32 if float32 else torch.float16
 
-        if model_id == 'stabilityai/stable-diffusion-2-1-base':
+        if model_id == 'stabilityai/stable-diffusion-2-1-base' or model_id == 'Manojb/stable-diffusion-2-1-base':
             latent_space_shape = [4, 64, 64]
             self.H, self.W = 512, 512
         elif model_id == 'stabilityai/stable-diffusion-2-1':
@@ -41,7 +41,9 @@ class TurboDDCM():
         self.C = 1 # as described in the paper - we use C=1
         self.no_bits_steps = TurboDDCM.get_no_bits_steps(self.T, self.K, self.M, self.C, self.H, self.W) # NBS
 
+        print(f"[TurboDDCM] Initializing BitStreamEncoder with K={self.K}, M={self.M}, C={self.C}")
         self.bit_stream_obj = BitStreamEncoder(self.K, self.M, self.C)
+        print(f"[TurboDDCM] BitStreamEncoder initialized successfully")
 
     def compress(self, image, weight_pixel_vector):
         assert image.shape == torch.Size([1, 3, self.H, self.W])
@@ -144,7 +146,7 @@ class TurboDDCM():
         decoded_list = self.bit_stream_obj.decode(encoding)
 
         current_x_t = self.x_T
-        x_est = torch.zeros(self.K, dtype=torch.float16, device=self.device)
+        x_est = torch.zeros(self.K, dtype=self.torch_dtype, device=self.device)
 
         assert self.C == 1 # used in the mapping from -1 to 0 and 1 to 1 in the loop below
 
@@ -157,7 +159,7 @@ class TurboDDCM():
             decoded_noise_indexes, decoded_coeffs_indexes = decoded_list[steps_counter]
 
             torch.manual_seed(self.seed + steps_counter + 1)
-            codebook = torch.randn(self.x_T_denoised.numel(), self.K, dtype=torch.float16, device=self.device)
+            codebook = torch.randn(self.x_T_denoised.numel(), self.K, dtype=self.torch_dtype, device=self.device)
 
             x_est.zero_()
             x_est[decoded_noise_indexes] = 2*torch.tensor(decoded_coeffs_indexes, dtype=self.torch_dtype, device=self.device) - 1 # -1 to 0 and 1 to 1

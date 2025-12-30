@@ -26,7 +26,7 @@ def main(args):
         model_id = "stabilityai/stable-diffusion-2-1"
     else:
         resize_to = (512, 512)
-        model_id = "stabilityai/stable-diffusion-2-1-base"
+        model_id = "Manojb/stable-diffusion-2-1-base"  # Using alternative since official was deprecated
 
     if test_img.shape[2:3] != torch.Size(resize_to):
         print(f"images will be resized to {resize_to}")
@@ -40,7 +40,7 @@ def main(args):
             weight_pixel_vector = torch.load(os.path.join(args.weights_dir, os.path.splitext(file_name)[0] + '.pt'), device_str)
 
         compr_start_time = time.process_time()
-        (reconstruction, encoding), compr_end_time = turbo_ddcm.compress(img, weight_pixel_vector)
+        (reconstruction, encoding, step_info), compr_end_time = turbo_ddcm.compress(img, weight_pixel_vector)
         
         binary_path = os.path.join(args.output_dir, os.path.splitext(file_name)[0] + utils.BIN_SUFFIX)
         utils.save_as_binary(encoding, binary_path)
