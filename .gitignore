@@ -1,1 +1,40 @@
+# Python
+*.pyc
+__pycache__/
 *.pkl
+*.yaml
+*.pye
+*.egg-info/
+*.egg
+dist/
+build/
+
+# Results and outputs
+results/
+ddcm_test_output/
+
+# Datasets
+dataset_Kodack24/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+*.out
+*.err
+slurm-*
+
+# Temporary files
+*.tmp
+*.temp
+temp_input/
+

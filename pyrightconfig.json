@@ -1,0 +1,14 @@
+{
+  "include": [
+    "src"
+  ],
+  "exclude": [
+    "**/__pycache__",
+    "**/node_modules"
+  ],
+  "extraPaths": [
+    "Turbo-DDCM-master"
+  ],
+  "pythonVersion": "3.10"
+}
+
