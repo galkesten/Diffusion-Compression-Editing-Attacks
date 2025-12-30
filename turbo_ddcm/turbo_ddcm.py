@@ -59,13 +59,15 @@ class TurboDDCM():
 
         self.comp_sbs_current_x_t = self.compress_denoise_step(self.comp_sbs_current_x_t, self.get_comp_sbs_current_total_step_idx(), TurboDDCM.s_denoising_eta, is_last_step=True)
         self.comp_sbs_steps_without_bits_counter += 1
-        return self.compress_end(), compression_end_time
+        reconstruction, encoding, step_info = self.compress_end()
+        return (reconstruction, encoding, step_info), compression_end_time
 
 
     def compress_start(self, image, weight_pixel_vector):
         self.comp_sbs_started = True
         self.comp_sbs_steps_with_bits_counter = 0
         self.comp_sbs_steps_without_bits_counter = 0
+        self.step_info_list = []  # Store step-by-step information
 
         image = image.to(self.torch_dtype)
         self.comp_sbs_enc_img = self.ddpm.encode_image(image)
@@ -102,6 +104,26 @@ class TurboDDCM():
         current_x_t = self.ddpm.reverse_step(current_epsilon_hat, t, current_x_t, TurboDDCM.s_encoding_eta, best_noise)
         chosen_indexes_list = [chosen_index.item() for chosen_index in chosen_indexes]
         coeff_indices_list = [coeff_indice.item() for coeff_indice in coeff_indices]
+        
+        # Convert coefficients from [0,1] back to [-1,1] for clarity
+        coefficients = [1 if c == 1 else -1 for c in coeff_indices_list]
+        
+        # Sort by indices in ascending order (matching the bitstream encoding)
+        sorted_pairs = sorted(zip(chosen_indexes_list, coefficients))
+        sorted_indices, sorted_coefficients = zip(*sorted_pairs)
+        sorted_indices = list(sorted_indices)
+        sorted_coefficients = list(sorted_coefficients)
+        
+        # Store step information (sorted by indices)
+        step_info = {
+            'step': idx,
+            'timestep': t.item() if hasattr(t, 'item') else int(t),
+            'vector_indices': sorted_indices,  # M indices from codebook (sorted ascending)
+            'coefficients': sorted_coefficients,  # M coefficients: 1 or -1 (sorted by indices)
+            'num_vectors': len(sorted_indices)
+        }
+        self.step_info_list.append(step_info)
+        
         self.bit_stream_obj.add(chosen_indexes_list, coeff_indices_list)
         self.comp_sbs_steps_with_bits_counter += 1
         self.comp_sbs_current_x_t = current_x_t
@@ -119,7 +141,18 @@ class TurboDDCM():
         encoding = self.bit_stream_obj.get_encoding()
         self.bit_stream_obj.clear()
         reconstruction = self.ddpm.decode_img(self.comp_sbs_current_x_t)
-        return reconstruction, encoding
+        
+        # Return encoding, reconstruction, and step information
+        step_info_dict = {
+            'seed': self.seed,  # Seed used to generate codebooks
+            'K': self.K,  # Codebook size
+            'M': self.M,  # Number of vectors selected per step
+            'T': self.T,  # Total diffusion steps
+            'total_steps': len(self.step_info_list),  # Number of encoding steps
+            'steps': self.step_info_list
+        }
+        
+        return reconstruction, encoding, step_info_dict
 
 
     def get_iteration_best_noise_from_codebook_optimized(self, codebook, residual):

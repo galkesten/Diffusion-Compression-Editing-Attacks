@@ -1,0 +1,278 @@
+python process_dataset.py \
+    --input_dir dataset_Kodack24 \
+    --compressed_dir dataset_Kodack24_compressed \
+    --decompressed_dir dataset_Kodack24_decompress \
+    --M 300 \
+    --gpu 0 \
+    --T 20 \
+    --K 16384 \
+    --seed 88888888 \
+    --float32
+
+python process_dataset.py \
+    --input_dir dataset_Kodack24_LEGO \
+    --compressed_dir dataset_Kodack24_LEGO_compressed \
+    --decompressed_dir dataset_Kodack24_LEGO_decompress \
+    --M 300 \
+    --gpu 0 \
+    --T 20 \
+    --K 16384 \
+    --seed 88888888 \
+    --float32
+
+python process_dataset.py \
+    --input_dir dataset_Kodack24_Pop_Art \
+    --compressed_dir dataset_Kodack24_Pop_Art_compressed \
+    --decompressed_dir dataset_Kodack24_Pop_Art_decompress \
+    --M 300 \
+    --gpu 0 \
+    --T 20 \
+    --K 16384 \
+    --seed 88888888 \
+    --float32
+
+./py-sbatch.sh process_dataset.py \
+    --input_dir dataset_Kodack24 \
+    --compressed_dir dataset_Kodack24_compressed_700 \
+    --decompressed_dir dataset_Kodack24_decompress_700 \
+    --M 700 \
+    --gpu 0 \
+    --T 20 \
+    --K 16384 \
+    --seed 88888888 \
+    --float32
+
+./py-sbatch.sh process_dataset.py \
+    --input_dir dataset_Kodack24_LEGO \
+    --compressed_dir dataset_Kodack24_LEGO_compressed_700 \
+    --decompressed_dir dataset_Kodack24_LEGO_decompress_700 \
+    --M 700 \
+    --gpu 0 \
+    --T 20 \
+    --K 16384 \
+    --seed 88888888 \
+    --float32
+
+./py-sbatch.sh process_dataset.py \
+    --input_dir dataset_Kodack24_Pop_Art \
+    --compressed_dir dataset_Kodack24_Pop_Art_compressed_700 \
+    --decompressed_dir dataset_Kodack24_Pop_Art_decompress_700 \
+    --M 700 \
+    --gpu 0 \
+    --T 20 \
+    --K 16384 \
+    --seed 88888888 \
+    --float32
+
+./py-sbatch.sh process_dataset.py \
+    --input_dir dataset_Kodack24 \
+    --compressed_dir dataset_Kodack24_compressed_1000 \
+    --decompressed_dir dataset_Kodack24_decompress_1000 \
+    --M 1000 \
+    --gpu 0 \
+    --T 20 \
+    --K 16384 \
+    --seed 88888888 \
+    --float32
+
+./py-sbatch.sh process_dataset.py \
+    --input_dir dataset_Kodack24_LEGO \
+    --compressed_dir dataset_Kodack24_LEGO_compressed_1000 \
+    --decompressed_dir dataset_Kodack24_LEGO_decompress_1000 \
+    --M 1000 \
+    --gpu 0 \
+    --T 20 \
+    --K 16384 \
+    --seed 88888888 \
+    --float32
+
+./py-sbatch.sh process_dataset.py \
+    --input_dir dataset_Kodack24_Pop_Art \
+    --compressed_dir dataset_Kodack24_Pop_Art_compressed_1000 \
+    --decompressed_dir dataset_Kodack24_Pop_Art_decompress_1000 \
+    --M 1000 \
+    --gpu 0 \
+    --T 20 \
+    --K 16384 \
+    --seed 88888888 \
+    --float32
+
+
+
+
+./py-sbatch.sh process_dataset.py \
+    --input_dir dataset_Kodack24 \
+    --compressed_dir dataset_Kodack24_compressed_M30_T100_K4096 \
+    --decompressed_dir dataset_Kodack24_decompress_M30_T100_K4096 \
+    --M 30 \
+    --gpu 0 \
+    --T 100 \
+    --K 4096 \
+    --seed 88888888 \
+    --float32
+
+./py-sbatch.sh process_dataset.py \
+    --input_dir dataset_Kodack24_LEGO \
+    --compressed_dir dataset_Kodack24_LEGO_compressed_M30_T100_K4096 \
+    --decompressed_dir dataset_Kodack24_LEGO_decompress_M30_T100_K4096 \
+    --M 30 \
+    --gpu 0 \
+    --T 100 \
+    --K 4096 \
+    --seed 88888888 \
+    --float32
+
+./py-sbatch.sh process_dataset.py \
+    --input_dir dataset_Kodack24_Pop_Art \
+    --compressed_dir dataset_Kodack24_Pop_Art_compressed_M30_T100_K4096 \
+    --decompressed_dir dataset_Kodack24_Pop_Art_decompress_M30_T100_K4096 \
+    --M 30 \
+    --gpu 0 \
+    --T 100 \
+    --K 4096 \
+    --seed 88888888 \
+    --float32
+
+./py-sbatch.sh process_dataset.py \
+    --input_dir dataset_Kodack24 \
+    --compressed_dir dataset_Kodack24_compressed_M1_T1000_K256 \
+    --decompressed_dir dataset_Kodack24_decompress_M1_T1000_K256 \
+    --M 1 \
+    --gpu 0 \
+    --T 1000 \
+    --K 256 \
+    --seed 88888888 \
+    --float32
+
+./py-sbatch.sh process_dataset.py \
+    --input_dir dataset_Kodack24_LEGO \
+    --compressed_dir dataset_Kodack24_LEGO_compressed_M1_T1000_K256 \
+    --decompressed_dir dataset_Kodack24_LEGO_decompress_M1_T1000_K256 \
+    --M 1 \
+    --gpu 0 \
+    --T 1000 \
+    --K 256 \
+    --seed 88888888 \
+    --float32
+
+./py-sbatch.sh process_dataset.py \
+    --input_dir dataset_Kodack24_Pop_Art \
+    --compressed_dir dataset_Kodack24_Pop_Art_compressed_M1_T1000_K256 \
+    --decompressed_dir dataset_Kodack24_Pop_Art_decompress_M1_T1000_K256 \
+    --M 1 \
+    --gpu 0 \
+    --T 1000 \
+    --K 256 \
+    --seed 88888888 \
+    --float32
+
+
+
+
+
+python analyze_step_overlaps.py --compressed_dir dataset_Kodack24_compressed
+
+python analyze_step_overlaps.py --compressed_dir dataset_Kodack24_LEGO_compressed
+
+python analyze_step_overlaps.py --compressed_dir dataset_Kodack24_Pop_Art_compressed
+
+python analyze_step_overlaps.py --compressed_dir dataset_Kodack24_compressed_700
+
+python analyze_step_overlaps.py --compressed_dir dataset_Kodack24_LEGO_compressed_700
+
+python analyze_step_overlaps.py --compressed_dir dataset_Kodack24_Pop_Art_compressed_700
+
+python analyze_step_overlaps.py --compressed_dir dataset_Kodack24_compressed_1000
+
+python analyze_step_overlaps.py --compressed_dir dataset_Kodack24_LEGO_compressed_1000
+
+python analyze_step_overlaps.py --compressed_dir dataset_Kodack24_Pop_Art_compressed_1000
+
+python analyze_step_overlaps.py --compressed_dir dataset_Kodack24_compressed_M30_T100_K4096
+
+python analyze_step_overlaps.py --compressed_dir dataset_Kodack24_LEGO_compressed_M30_T100_K4096
+
+python analyze_step_overlaps.py --compressed_dir dataset_Kodack24_Pop_Art_compressed_M30_T100_K4096
+
+python analyze_step_overlaps.py --compressed_dir dataset_Kodack24_compressed_M1_T1000_K256
+
+python analyze_step_overlaps.py --compressed_dir dataset_Kodack24_LEGO_compressed_M1_T1000_K256
+
+python analyze_step_overlaps.py --compressed_dir dataset_Kodack24_Pop_Art_compressed_M1_T1000_K256
+
+
+
+conda activate turbo_ddcm && python apply_style_lora.py \
+    --input_dir dataset_Kodack24 \
+    --gpu 0 \
+    --image_size 512 \
+    --num_inference_steps 24 \
+    --styles LEGO 
+
+conda activate turbo_ddcm && python apply_style_lora.py \
+    --input_dir dataset_Kodack24 \
+    --gpu 0 \
+    --image_size 512 \
+    --num_inference_steps 24 \
+    --styles Pop_Art 
+
+python analyze_style_overlaps.py \
+    --original_dir dataset_Kodack24_compressed \
+    --lego_dir dataset_Kodack24_LEGO_compressed \
+    --popart_dir dataset_Kodack24_Pop_Art_compressed
+
+python analyze_style_overlaps.py \
+    --original_dir dataset_Kodack24_compressed_700 \
+    --lego_dir dataset_Kodack24_LEGO_compressed_700 \
+    --popart_dir dataset_Kodack24_Pop_Art_compressed_700
+
+python analyze_style_overlaps.py \
+    --original_dir dataset_Kodack24_compressed_1000 \
+    --lego_dir dataset_Kodack24_LEGO_compressed_1000 \
+    --popart_dir dataset_Kodack24_Pop_Art_compressed_1000
+
+python analyze_style_overlaps.py \
+    --original_dir dataset_Kodack24_compressed_M30_T100_K4096 \
+    --lego_dir dataset_Kodack24_LEGO_compressed_M30_T100_K4096 \
+    --popart_dir dataset_Kodack24_Pop_Art_compressed_M30_T100_K4096
+
+python analyze_style_overlaps.py \
+    --original_dir dataset_Kodack24_compressed_M1_T1000_K256 \
+    --lego_dir dataset_Kodack24_LEGO_compressed_M1_T1000_K256 \
+    --popart_dir dataset_Kodack24_Pop_Art_compressed_M1_T1000_K256
+
+
+
+
+
+
+
+
+
+
+
+
+python visualize_dataset_embeddings.py \
+    --original_dir dataset_Kodack24 \
+    --lego_dir dataset_Kodack24_LEGO \
+    --popart_dir dataset_Kodack24_Pop_Art \
+    --feature_mode resnet \
+    --method both \
+    --output dataset_embeddings.png
+
+python visualize_dataset_embeddings.py \
+    --original_dir dataset_Kodack24 \
+    --lego_dir dataset_Kodack24_LEGO \
+    --popart_dir dataset_Kodack24_Pop_Art \
+    --feature_mode pixels \
+    --method both \
+    --output dataset_embeddings_pixels.png
+
+python apply_style_diff.py \
+    --x_path dataset_Kodack24/4.png \
+    --x_style_path dataset_Kodack24_Pop_Art/4_Pop_Art.png \
+    --y_path dataset_Kodack24/1.png \
+    --output_path 1_with_Pop_Art_style_from_4.png \
+    --gpu 0 \
+    --float32
+    
