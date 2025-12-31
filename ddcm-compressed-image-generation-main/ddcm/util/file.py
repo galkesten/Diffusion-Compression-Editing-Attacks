@@ -30,6 +30,8 @@ def get_args_from_filename(filename, cfg=False, iqa=False):
         model_id = 'CompVis/stable-diffusion-v1-4'
     elif model_id == 'stable-diffusion-v1-5':
         model_id = 'stable-diffusion-v1-5/stable-diffusion-v1-5'
+    elif model_id == 'stable-diffusion-2-1-base':
+        model_id = 'Manojb/stable-diffusion-2-1-base'
     elif model_id.startswith('stable-diffusion-'):
         model_id = f'stabilityai/{model_id}'
     elif model_id == 'imagenet':

@@ -210,7 +210,18 @@ def compress(model: PipelineWrapper,
     except torch.OutOfMemoryError:
         img = model.decode_image(xt.to('cpu'))
 
-    return img, torch.tensor(noise_indices, dtype=torch.int).cpu().squeeze(), torch.tensor(coeffs_indices, dtype=torch.int).cpu().squeeze()
+    noise_tensor = torch.tensor(noise_indices, dtype=torch.int).cpu()
+    coeff_tensor = torch.tensor(coeffs_indices, dtype=torch.int).cpu()
+    # Squeeze noise_indices (removes unnecessary dimensions)
+    noise_tensor = noise_tensor.squeeze()
+    # For coeff_indices, preserve 2D shape (num_timesteps, M-1) even when M-1=1
+    # This is needed because save_as_binary_bitwise expects iterable coeff_indices_t
+    if coeff_tensor.dim() == 2 and coeff_tensor.shape[1] == 1:
+        # Keep as 2D: (num_timesteps, 1) - don't squeeze the last dimension
+        pass
+    else:
+        coeff_tensor = coeff_tensor.squeeze()
+    return img, noise_tensor, coeff_tensor
 
 
 def generate(model: PipelineWrapper,

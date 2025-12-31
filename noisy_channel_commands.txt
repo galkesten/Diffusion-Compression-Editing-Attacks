@@ -1,0 +1,149 @@
+# Template commands for noisy_channel_experiment.py
+# 
+# Arguments:
+#   --dataset: Path to dataset directory containing PNG images
+#   --resolution: Image resolution (default: 512, only choice: 512)
+#   --method: Compression method (choices: jpeg, ddcm, turbo_ddcm)
+#   --bpp: Target bits per pixel (choices: 0.1, 0.5, 1.0)
+#   --num_trials: Number of trials per BER value
+#   --params_csv: Path to CSV file with compression parameters
+#   --num_samples_to_save_per_BER: Number of sample images to save per BER
+#   --output_dir: Output directory for results
+#
+# Note: Make sure to run find_compression_params.py first to generate the params CSV files
+
+# ============================================================================
+# JPEG Examples
+# ============================================================================
+
+# JPEG, BPP 0.1
+./py-sbatch.sh src/noisy_channel_experiment.py \
+    --dataset dataset_Kodack24 \
+    --resolution 512 \
+    --method jpeg \
+    --bpp 0.1 \
+    --num_trials 50 \
+    --params_csv results/compression_ratio_estimate/jpeg/jpeg_compression_params.csv \
+    --num_samples_to_save_per_BER 5 \
+    --output_dir results/noisy_channel_results/jpeg/noisy_channel_bpp0.1
+
+# JPEG, BPP 0.5
+./py-sbatch.sh src/noisy_channel_experiment.py \
+    --dataset dataset_Kodack24 \
+    --resolution 512 \
+    --method jpeg \
+    --bpp 0.5 \
+    --num_trials 50 \
+    --params_csv results/compression_ratio_estimate/jpeg/jpeg_compression_params.csv \
+    --num_samples_to_save_per_BER 5 \
+    --output_dir results/noisy_channel_results/jpeg/noisy_channel_bpp0.5
+
+# JPEG, BPP 1.0
+./py-sbatch.sh src/noisy_channel_experiment.py \
+    --dataset dataset_Kodack24 \
+    --resolution 512 \
+    --method jpeg \
+    --bpp 1.0 \
+    --num_trials 50 \
+    --params_csv results/compression_ratio_estimate/jpeg/jpeg_compression_params.csv \
+    --num_samples_to_save_per_BER 5 \
+    --output_dir results/noisy_channel_results/jpeg/noisy_channel_bpp1.0
+
+# ============================================================================
+# DDCM Examples
+# ============================================================================
+
+# DDCM, BPP 0.1
+./py-sbatch.sh src/noisy_channel_experiment.py \
+    --dataset dataset_Kodack24 \
+    --resolution 512 \
+    --method ddcm \
+    --bpp 0.1 \
+    --num_trials 50 \
+    --params_csv results/compression_ratio_estimate/ddcm/ddcm_theoretical_bpp.csv \
+    --num_samples_to_save_per_BER 5 \
+    --output_dir results/noisy_channel_results/ddcm/noisy_channel_bpp0.1
+
+# DDCM, BPP 0.5
+./py-sbatch.sh src/noisy_channel_experiment.py \
+    --dataset dataset_Kodack24 \
+    --resolution 512 \
+    --method ddcm \
+    --bpp 0.5 \
+    --num_trials 50 \
+    --params_csv results/compression_ratio_estimate/ddcm/ddcm_theoretical_bpp.csv \
+    --num_samples_to_save_per_BER 5 \
+    --output_dir results/noisy_channel_results/ddcm/noisy_channel_bpp0.5
+
+# DDCM, BPP 1.0
+./py-sbatch.sh src/noisy_channel_experiment.py \
+    --dataset dataset_Kodack24 \
+    --resolution 512 \
+    --method ddcm \
+    --bpp 1.0 \
+    --num_trials 50 \
+    --params_csv results/compression_ratio_estimate/ddcm/ddcm_theoretical_bpp.csv \
+    --num_samples_to_save_per_BER 5 \
+    --output_dir results/noisy_channel_results/ddcm/noisy_channel_bpp1.0
+
+# ============================================================================
+# Turbo-DDCM Examples
+# ============================================================================
+
+# Turbo-DDCM, BPP 0.1
+./py-sbatch.sh src/noisy_channel_experiment.py \
+    --dataset dataset_Kodack24 \
+    --resolution 512 \
+    --method turbo_ddcm \
+    --bpp 0.1 \
+    --num_trials 50 \
+    --params_csv results/compression_ratio_estimate/turbo_ddcm/turbo_ddcm_theoretical_bpp.csv \
+    --num_samples_to_save_per_BER 5 \
+    --output_dir results/noisy_channel_results/turbo_ddcm/noisy_channel_bpp0.1
+
+# Turbo-DDCM, BPP 0.5
+./py-sbatch.sh src/noisy_channel_experiment.py \
+    --dataset dataset_Kodack24 \
+    --resolution 512 \
+    --method turbo_ddcm \
+    --bpp 0.5 \
+    --num_trials 50 \
+    --params_csv results/compression_ratio_estimate/turbo_ddcm/turbo_ddcm_theoretical_bpp.csv \
+    --num_samples_to_save_per_BER 5 \
+    --output_dir results/noisy_channel_results/turbo_ddcm/noisy_channel_bpp0.5
+
+# Turbo-DDCM, BPP 1.0
+./py-sbatch.sh src/noisy_channel_experiment.py \
+    --dataset dataset_Kodack24 \
+    --resolution 512 \
+    --method turbo_ddcm \
+    --bpp 1.0 \
+    --num_trials 50 \
+    --params_csv results/compression_ratio_estimate/turbo_ddcm/turbo_ddcm_theoretical_bpp.csv \
+    --num_samples_to_save_per_BER 5 \
+    --output_dir results/noisy_channel_results/turbo_ddcm/noisy_channel_bpp1.0
+
+# ============================================================================
+# SLURM Batch Job Examples (using py-sbatch.sh)
+# ============================================================================
+
+# Example: Run JPEG BPP 0.1 as a SLURM job
+# ./py-sbatch.sh src/noisy_channel_experiment.py \
+#     --dataset dataset_Kodack24 \
+#     --resolution 512 \
+#     --method jpeg \
+#     --bpp 0.1 \
+#     --num_trials 50 \
+#     --params_csv results/compression_ratio_estimate/jpeg/jpeg_compression_params.csv \
+#     --num_samples_to_save_per_BER 5 \
+#     --output_dir results/noisy_channel_results/jpeg/noisy_channel_bpp0.1
+
+# ============================================================================
+# Notes:
+# ============================================================================
+# - BER values tested: 10^-6, 10^-5, 10^-4, 10^-3, 10^-2, 10^-1
+# - Results are saved to: {output_dir}/noisy_channel_results_{method}_bpp{bpp}.csv
+# - Sample images are saved to: {output_dir}/samples_ber{ber}/
+# - Compressed files are saved to: {output_dir}/
+# - Make sure compression params CSV files exist before running (run find_compression_params.py first)
+

@@ -225,24 +225,27 @@ def run_ddcm_experiment(dataset_path, sample_images, target_bpps, project_root, 
         M = ddcm_Ms[target_bpp]
         
         temp_input_dir = os.path.join(output_dir, 'temp_input')
-        os.makedirs(temp_input_dir, exist_ok=True)
+        images_subdir = os.path.join(temp_input_dir, 'images')
+        os.makedirs(images_subdir, exist_ok=True)
         for img_file in sample_images:
             src_path = os.path.join(dataset_path, img_file)
-            dst_path = os.path.join(temp_input_dir, img_file)
+            dst_path = os.path.join(images_subdir, img_file)
             shutil.copy(src_path, dst_path)
         
         roundtrip_script = os.path.join(ddcm_path, 'latent_compression.py')
+        # Use relative paths to avoid DDCM's path stripping bug
+        rel_input_dir = os.path.relpath(images_subdir, ddcm_path)
+        rel_output_dir = os.path.relpath(output_dir, ddcm_path)
         cmd = [
             sys.executable, roundtrip_script,
             'roundtrip',
-            '--input_dir', os.path.abspath(temp_input_dir),
-            '--output_dir', os.path.abspath(output_dir),
+            '--input_dir', rel_input_dir,
+            '--output_dir', rel_output_dir,
             '--model_id', model_id,
             '--num_noises', str(K),
             '--timesteps', str(T),
             '--num_pursuit_noises', str(M),
             '--num_pursuit_coef_bits', str(C),
-            '--t_range', str(t_range[0]), str(t_range[1]),
             '--gpu', '0',
             '--float16'
         ]
@@ -252,6 +255,7 @@ def run_ddcm_experiment(dataset_path, sample_images, target_bpps, project_root, 
         out_prefix = f'T={T}_in{t_range[0]}-{t_range[1]}_K={K}_M={M}_C={C}_model={model_id.split("/")[1]}'
         for img_file in sample_images:
             base_name = os.path.splitext(img_file)[0]
+            # DDCM saves files directly under out_prefix/ (not in images/ subdirectory)
             bin_file = os.path.join(output_dir, out_prefix, f'{base_name}_noise_indices.bin')
             if os.path.exists(bin_file):
                 actual_bpp = calculate_actual_bpp(bin_file, imsize, imsize)
