@@ -3,6 +3,7 @@ import sys
 import csv
 import shutil
 import random
+import time
 import numpy as np
 from PIL import Image
 import pandas as pd
@@ -10,7 +11,6 @@ from skimage.metrics import peak_signal_noise_ratio as psnr
 from pyiqa import create_metric
 import torch
 
-# Set up paths for API files (ddcm_api.py and turbo_ddcm_api.py are at root level)
 _script_dir = os.path.dirname(os.path.abspath(__file__))
 _project_root = os.path.dirname(_script_dir)
 _ddcm_path = os.path.join(_project_root, 'ddcm-compressed-image-generation-main')
@@ -20,12 +20,65 @@ if _ddcm_path not in sys.path:
     sys.path.insert(0, _ddcm_path)
 if _turbo_ddcm_path not in sys.path:
     sys.path.insert(0, _turbo_ddcm_path)
-
-# Import API functions (packages ddcm and turbo_ddcm are installed, but API files need sys.path)
 from ddcm_api import main_programmatic as ddcm_main_programmatic
 from turbo_ddcm_api import compress_main_programmatic as turbo_compress_main_programmatic
 from turbo_ddcm_api import decompress_main_programmatic as turbo_decompress_main_programmatic
 import turbo_ddcm.utils as utils
+
+
+def safe_rmtree(path):
+    if os.path.exists(path):
+        if os.path.islink(path):
+            os.unlink(path)
+        else:
+            shutil.rmtree(path)
+
+
+def cleanup_noisy_file(noisy_file, method):
+    try:
+        if os.path.exists(noisy_file):
+            os.remove(noisy_file)
+        
+        file_dir = os.path.dirname(noisy_file)
+        if method == 'ddcm':
+            if os.path.exists(file_dir) and not os.listdir(file_dir):
+                os.rmdir(file_dir)
+                file_dir = os.path.dirname(file_dir)
+        
+        trial_subdir = file_dir
+        if os.path.exists(trial_subdir) and not os.listdir(trial_subdir):
+            os.rmdir(trial_subdir)
+    except Exception as e:
+        print(f"      ✗ Error cleaning up noisy file {noisy_file}: {e}")
+
+
+def cleanup_temp_dirs(output_dir, method, base_name, ber=None, trial=None):
+    if method == 'ddcm':
+        if ber is not None and trial is not None:
+            temp_patterns = [
+                os.path.join(output_dir, f'temp_ddcm_input_{base_name}_ber{ber}_trial{trial}'),
+                os.path.join(output_dir, f'temp_decomp_{base_name}_ber{ber}_trial{trial}')
+            ]
+        else:
+            temp_patterns = [
+                os.path.join(output_dir, f'temp_ddcm_input_{base_name}'),
+                os.path.join(output_dir, f'temp_decomp_{base_name}')
+            ]
+    elif method == 'turbo_ddcm':
+        temp_patterns = [
+            os.path.join(output_dir, f'temp_turbo_ddcm_input_{base_name}'),
+            os.path.join(output_dir, f'temp_decomp_{base_name}')
+        ]
+    else:
+        return
+    
+    prefix = "    " if ber is None else "      "
+    for temp_dir in temp_patterns:
+        if os.path.exists(temp_dir):
+            try:
+                safe_rmtree(temp_dir)
+            except Exception as e:
+                print(f"{prefix}✗ Error cleaning up temp dir {temp_dir}: {e}")
 
 
 def get_images(dataset_path):
@@ -68,17 +121,23 @@ def load_turbo_ddcm_params(csv_path, target_bpp):
 
 
 def compress_jpeg(img_path, quality, output_path, resolution=512):
+    start_time = time.time()
     img = Image.open(img_path).convert('RGB')
     if img.size != (resolution, resolution):
         img = img.resize((resolution, resolution))
     img.save(output_path, format='JPEG', quality=quality)
+    compress_time = time.time() - start_time
+    print(f"    [JPEG compress] Compression time: {compress_time:.4f}s")
 
 
 def decompress_jpeg(jpeg_path, resolution=512):
+    start_time = time.time()
     try:
         img = Image.open(jpeg_path).convert('RGB')
         if img.size != (resolution, resolution):
             raise ValueError(f"Decompressed JPEG image {img.size} does not match resolution {resolution}")
+        decompress_time = time.time() - start_time
+        print(f"    [JPEG decompress] Decompression time: {decompress_time:.4f}s")
         return img, None
     except Exception as e:
         error_msg = str(e)
@@ -100,6 +159,7 @@ def compress_ddcm(img_path, params, output_dir, project_root, resolution=512):
     
     print(f" original image path: {img_path}, temp input path: {temp_input}, output directory: {output_dir}")
     try:
+        start_time = time.time()
         ddcm_main_programmatic(
             mode='compress',
             input_dir=temp_input,
@@ -113,42 +173,53 @@ def compress_ddcm(img_path, params, output_dir, project_root, resolution=512):
             C=C,
             t_range=[T-1, 0]
         )
+        compress_time = time.time() - start_time
+        print(f"    [DDCM compress] Compression time: {compress_time:.2f}s")
         base_name = os.path.splitext(os.path.basename(img_path))[0]
         out_prefix = f'T={T}_in{T-1}-0_K={K}_M={M}_C={C}_model=stable-diffusion-2-1-base'
         bin_file = os.path.join(output_dir, out_prefix, f'{base_name}_noise_indices.bin')
         return bin_file if os.path.exists(bin_file) else None
     finally:
-        if os.path.exists(temp_input):
-            shutil.rmtree(temp_input)
+        safe_rmtree(temp_input)
 
 
-def decompress_ddcm(bin_file, output_dir, project_root, resolution=512):
-    temp_input = os.path.join(output_dir, 'temp_ddcm_input')
-    temp_output = os.path.join(output_dir, 'temp_decomp')
-    # Clean directories first to avoid leftover files from previous decompressions
-    if os.path.exists(temp_input):
-        shutil.rmtree(temp_input)
-    if os.path.exists(temp_output):
-        shutil.rmtree(temp_output)
+def decompress_ddcm(bin_file, output_dir, project_root, resolution=512, image_name=None, ber=None, trial=None):
+    if image_name is None:
+        image_name = "unknown"
+    base_name = os.path.splitext(image_name)[0] if image_name else "unknown"
+    
+    if ber is not None and trial is not None:
+        temp_input = os.path.join(output_dir, f'temp_ddcm_input_{base_name}_ber{ber}_trial{trial}')
+        temp_output = os.path.join(output_dir, f'temp_decomp_{base_name}_ber{ber}_trial{trial}')
+    else:
+        temp_input = os.path.join(output_dir, f'temp_ddcm_input_{base_name}')
+        temp_output = os.path.join(output_dir, f'temp_decomp_{base_name}')
+    safe_rmtree(temp_input)
+    safe_rmtree(temp_output)
     print(f"    [DDCM decompress] Creating temp_input dir: {temp_input}")
     print(f"    [DDCM decompress] Creating temp_output dir: {temp_output}")
     os.makedirs(temp_input, exist_ok=True)
     os.makedirs(temp_output, exist_ok=True)
     
-    # Create directory structure matching the bin_file location
     bin_dir = os.path.dirname(bin_file)
-    bin_subdir = os.path.basename(bin_dir)  # e.g., "T=1000_in999-0_K=8192_M=2_C=3_model=..."
+    bin_subdir = os.path.basename(bin_dir)
     temp_bin_dir = os.path.join(temp_input, bin_subdir)
     print(f"    [DDCM decompress] Creating temp_bin_dir: {temp_bin_dir}")
     os.makedirs(temp_bin_dir, exist_ok=True)
     
     bin_basename = os.path.basename(bin_file)
-    temp_bin_file = os.path.join(temp_bin_dir, bin_basename)
+    if ber is not None and trial is not None:
+        file_base = os.path.splitext(bin_basename)[0].replace('_noise_indices', '')
+        temp_bin_basename = f'{file_base}_ber{ber}_trial{trial}_noise_indices.bin'
+    else:
+        temp_bin_basename = bin_basename
+    temp_bin_file = os.path.join(temp_bin_dir, temp_bin_basename)
     print(f"    [DDCM decompress] Copying {bin_basename} to {temp_bin_file}")
     shutil.copy(bin_file, temp_bin_file)
     
     print(f"bin file path: {bin_file}, input directory: {temp_input}, output directory: {temp_output}")
     try:
+        start_time = time.time()
         ddcm_main_programmatic(
             mode='decompress',
             input_dir=temp_input,
@@ -156,8 +227,8 @@ def decompress_ddcm(bin_file, output_dir, project_root, resolution=512):
             gpu=0,
             float16=True
         )
-        # DDCM saves files in subdirectories matching the input structure, search recursively
-        # Since we use a clean temp directory for each decompression, taking the first PNG is safe
+        decompress_time = time.time() - start_time
+        print(f"    [DDCM decompress] Decompression time: {decompress_time:.2f}s")
         png_files = []
         for root, dirs, files in os.walk(temp_output):
             for f in files:
@@ -175,10 +246,8 @@ def decompress_ddcm(bin_file, output_dir, project_root, resolution=512):
         print(f"Error decompressing DDCM {bin_file}: {error_msg}")
         return None, error_msg
     finally:
-        if os.path.exists(temp_input):
-            shutil.rmtree(temp_input)
-        if os.path.exists(temp_output):
-            shutil.rmtree(temp_output)
+        safe_rmtree(temp_input)
+        safe_rmtree(temp_output)
 
 
 def compress_turbo_ddcm(img_path, params, output_dir, project_root, resolution=512):
@@ -195,6 +264,7 @@ def compress_turbo_ddcm(img_path, params, output_dir, project_root, resolution=5
     
     print(f" original image path: {img_path}, temp input path: {temp_input}, output directory: {output_dir}")
     try:
+        start_time = time.time()
         turbo_compress_main_programmatic(
             input_dir=temp_input,
             output_dir=output_dir,
@@ -208,22 +278,23 @@ def compress_turbo_ddcm(img_path, params, output_dir, project_root, resolution=5
             save_reconstructions=False,
             save_runtimes=False
         )
+        compress_time = time.time() - start_time
+        print(f"    [Turbo-DDCM compress] Compression time: {compress_time:.2f}s")
         base_name = os.path.splitext(os.path.basename(img_path))[0]
         bin_file = os.path.join(output_dir, f'{base_name}{utils.BIN_SUFFIX}')
         return bin_file if os.path.exists(bin_file) else None
     finally:
-        if os.path.exists(temp_input):
-            shutil.rmtree(temp_input)
+        safe_rmtree(temp_input)
 
 
-def decompress_turbo_ddcm(bin_file, output_dir, project_root, resolution=512):
-    temp_input = os.path.join(output_dir, 'temp_turbo_ddcm_input')
-    temp_output = os.path.join(output_dir, 'temp_decomp')
-    # Clean directories first to avoid leftover files from previous decompressions
-    if os.path.exists(temp_input):
-        shutil.rmtree(temp_input)
-    if os.path.exists(temp_output):
-        shutil.rmtree(temp_output)
+def decompress_turbo_ddcm(bin_file, output_dir, project_root, resolution=512, image_name=None):
+    if image_name is None:
+        image_name = "unknown"
+    base_name = os.path.splitext(image_name)[0] if image_name else "unknown"
+    temp_input = os.path.join(output_dir, f'temp_turbo_ddcm_input_{base_name}')
+    temp_output = os.path.join(output_dir, f'temp_decomp_{base_name}')
+    safe_rmtree(temp_input)
+    safe_rmtree(temp_output)
     print(f"    [Turbo-DDCM decompress] Creating temp_input dir: {temp_input}")
     print(f"    [Turbo-DDCM decompress] Creating temp_output dir: {temp_output}")
     os.makedirs(temp_input, exist_ok=True)
@@ -244,12 +315,15 @@ def decompress_turbo_ddcm(bin_file, output_dir, project_root, resolution=512):
     
     print(f"bin file path: {bin_file}, input directory: {temp_input}, output directory: {temp_output}")
     try:
+        start_time = time.time()
         turbo_decompress_main_programmatic(
             input_dir=temp_input,
             output_dir=temp_output,
             gpu=0,
             save_runtimes=False
         )
+        decompress_time = time.time() - start_time
+        print(f"    [Turbo-DDCM decompress] Decompression time: {decompress_time:.2f}s")
         png_files = [f for f in os.listdir(temp_output) if f.endswith('.png')]
         if png_files:
             img = Image.open(os.path.join(temp_output, png_files[0])).convert('RGB')
@@ -263,10 +337,8 @@ def decompress_turbo_ddcm(bin_file, output_dir, project_root, resolution=512):
         print(f"Error decompressing Turbo-DDCM {bin_file}: {error_msg}")
         return None, error_msg
     finally:
-        if os.path.exists(temp_input):
-            shutil.rmtree(temp_input)
-        if os.path.exists(temp_output):
-            shutil.rmtree(temp_output)
+        safe_rmtree(temp_input)
+        safe_rmtree(temp_output)
 
 
 def calculate_bpp(binary_file, resolution=512):
@@ -281,14 +353,11 @@ def calculate_psnr(img1, img2):
         arr1 = np.array(img1).astype(np.float64)
         arr2 = np.array(img2).astype(np.float64)
         
-        # Ensure images have the same dimensions
         if arr1.shape != arr2.shape:
-            # Resize arr2 to match arr1
             img2_pil = Image.fromarray(arr2.astype(np.uint8))
             img2_pil = img2_pil.resize((arr1.shape[1], arr1.shape[0]))
             arr2 = np.array(img2_pil).astype(np.float64)
         
-        # Images are RGB with values 0-255
         assert arr1.min() >= 0 and arr1.max() <= 255, f"Image 1 values out of range [0, 255]: min={arr1.min()}, max={arr1.max()}"
         assert arr2.min() >= 0 and arr2.max() <= 255, f"Image 2 values out of range [0, 255]: min={arr2.min()}, max={arr2.max()}"
         return psnr(arr1, arr2, data_range=255)
@@ -297,7 +366,6 @@ def calculate_psnr(img1, img2):
         return np.nan
 
 
-# Initialize NIQE metric once
 _niqe_metric = None
 
 def get_niqe_metric():
@@ -309,7 +377,6 @@ def get_niqe_metric():
 def calculate_niqe(img):
     try:
         img_array = np.array(img).astype(np.float32) / 255.0
-        # pyiqa expects (1, C, H, W) format and values in range [0, 1]
         if len(img_array.shape) == 2:
             img_array = img_array[np.newaxis, np.newaxis, :, :]
         elif len(img_array.shape) == 3:
@@ -325,11 +392,6 @@ def calculate_niqe(img):
 
 
 def flip_bits(binary_file, ber, output_file):
-    """
-    Simulate a symmetric binary noisy channel by flipping each bit independently 
-    with probability ber (Bit Error Rate).
-    Returns the actual number of bits flipped.
-    """
     with open(binary_file, 'rb') as f:
         data = np.frombuffer(f.read(), dtype=np.uint8)
     
@@ -372,6 +434,7 @@ def compress_all_images(dataset_path, method, target_bpp, params_csv, resolution
         img_path = os.path.join(dataset_path, img_file)
         base_name = os.path.splitext(img_file)[0]
         
+        compress_start = time.time()
         if method == 'jpeg':
             if params and img_file in params:
                 quality = params[img_file]
@@ -384,6 +447,8 @@ def compress_all_images(dataset_path, method, target_bpp, params_csv, resolution
         elif method == 'turbo_ddcm' and params is not None:
             bin_file = compress_turbo_ddcm(img_path, params, output_dir, project_root, resolution)
             compressed_files[img_file] = bin_file
+        compress_total_time = time.time() - compress_start
+        print(f"    ✓ Compression complete for {img_file}: {compress_total_time:.2f}s")
     
     print(f"Compression complete: {len(compressed_files)}/{len(images)} images compressed successfully")
     return compressed_files
@@ -402,15 +467,19 @@ def measure_baseline_metrics(dataset_path, compressed_files, method, output_dir,
         compressed_file = compressed_files[img_file]
         actual_bpp = calculate_bpp(compressed_file, resolution)
         
+        print(f"    Decompressing image: {img_file}")
+        decompress_start = time.time()
         decompressed = None
         decompression_success = False
         error_reason = ''
         if method == 'jpeg':
             decompressed, error_reason = decompress_jpeg(compressed_file, resolution)
         elif method == 'ddcm':
-            decompressed, error_reason = decompress_ddcm(compressed_file, output_dir, project_root, resolution)
+            decompressed, error_reason = decompress_ddcm(compressed_file, output_dir, project_root, resolution, image_name=img_file)
         elif method == 'turbo_ddcm':
-            decompressed, error_reason = decompress_turbo_ddcm(compressed_file, output_dir, project_root, resolution)
+            decompressed, error_reason = decompress_turbo_ddcm(compressed_file, output_dir, project_root, resolution, image_name=img_file)
+        decompress_total_time = time.time() - decompress_start
+        print(f"    Decompression time for {img_file}: {decompress_total_time:.2f}s")
         if decompressed is not None:
             decompression_success = True
             print(f"    ✓ Decompression successful: {img_file}")
@@ -422,7 +491,10 @@ def measure_baseline_metrics(dataset_path, compressed_files, method, output_dir,
             niqe_val = 'N/A'
         else:
             try:
+                start_time = time.time()
                 psnr_val = calculate_psnr(original, decompressed)
+                psnr_time = time.time() - start_time
+                print(f"    [Metrics] PSNR calculation time: {psnr_time:.4f}s")
                 if np.isnan(psnr_val):
                     psnr_val = 'N/A'
                     print(f"    ✗ PSNR calculation failed for {img_file}")
@@ -431,7 +503,10 @@ def measure_baseline_metrics(dataset_path, compressed_files, method, output_dir,
                 print(f"    ✗ PSNR calculation error for {img_file}: {e}")
             
             try:
+                start_time = time.time()
                 niqe_val = calculate_niqe(decompressed)
+                niqe_time = time.time() - start_time
+                print(f"    [Metrics] NIQE calculation time: {niqe_time:.4f}s")
                 if np.isnan(niqe_val):
                     niqe_val = 'N/A'
             except Exception as e:
@@ -453,12 +528,15 @@ def measure_baseline_metrics(dataset_path, compressed_files, method, output_dir,
             'error_reason': error_reason
         }
         csv_writer.writerow(row)
-        csv_file.flush()  # Ensure immediate write to disk
+        csv_file.flush()
+        
+        base_name = os.path.splitext(img_file)[0]
+        cleanup_temp_dirs(output_dir, method, base_name)
     print(f"Baseline metrics complete for {len(images)} images")
 
 
 def simulate_noisy_channel(compressed_files, method, ber_values, num_trials, output_dir, project_root, 
-                          dataset_path, resolution, num_samples_to_save, target_bpp, csv_writer, csv_file):
+                          dataset_path, resolution, num_samples_to_save, target_bpp, csv_writer, csv_file, base_seed=42):
     print(f"\n=== Step 3: Simulating noisy channel ===")
     print(f"BER values: {ber_values}")
     print(f"Number of trials per BER: {num_trials}")
@@ -466,7 +544,6 @@ def simulate_noisy_channel(compressed_files, method, ber_values, num_trials, out
     total_iterations = len(ber_values) * num_trials * len(images)
     print(f"Total iterations: {total_iterations}")
     
-    # Create a temporary directory for noisy files (separate from compressed files)
     temp_noisy_dir = os.path.join(output_dir, 'temp_noisy_files')
     os.makedirs(temp_noisy_dir, exist_ok=True)
     
@@ -474,15 +551,14 @@ def simulate_noisy_channel(compressed_files, method, ber_values, num_trials, out
     try:
         for ber_idx, ber in enumerate(ber_values, 1):
             print(f"\n  Processing BER {ber_idx}/{len(ber_values)}: {ber}")
-            # Track how many samples we've saved for this BER
             samples_saved = {img_file: 0 for img_file in images}
             
-            for trial in range(num_trials):
-                print(f"    Trial {trial+1}/{num_trials}")
-                for img_idx, img_file in enumerate(images, 1):
+            for img_idx, img_file in enumerate(images, 1):
+                print(f"    Image {img_idx}/{len(images)}: {img_file}")
+                
+                for trial in range(num_trials):
                     iteration += 1
-                    if iteration % 10 == 0 or img_idx == 1:
-                        print(f"      Image {img_idx}/{len(images)}: {img_file} (iteration {iteration}/{total_iterations})")
+                    print(f"      [Image: {img_file}, Trial: {trial+1}/{num_trials}, BER: {ber}] (iteration {iteration}/{total_iterations})")
                     compressed_file = compressed_files.get(img_file)
                     if compressed_file is None or not os.path.exists(compressed_file):
                         raise ValueError(f"Compressed file {compressed_file} not found for image {img_file}")
@@ -493,40 +569,63 @@ def simulate_noisy_channel(compressed_files, method, ber_values, num_trials, out
                     compressed_name, orig_ext = os.path.splitext(compressed_basename)
                     base_name = os.path.splitext(img_file)[0]
                     
-                    # Create noisy file in temp directory
-                    noisy_file = os.path.join(temp_noisy_dir, f'{base_name}_ber{ber}_trial{trial}{orig_ext}')
+                    trial_subdir = os.path.join(temp_noisy_dir, f'trial{trial}_{base_name}_ber{ber}')
                     
-                    # For DDCM and Turbo-DDCM, we need to set up the directory structure
                     if method == 'ddcm':
-                        # DDCM needs the directory name with parameters, so create a subdirectory
-                        # Extract the directory name from compressed_file path
-                        ddcm_subdir = os.path.basename(compressed_dir)  # e.g., "T=1000_in999-0_K=8192_M=2_C=3_model=..."
-                        noisy_ddcm_dir = os.path.join(temp_noisy_dir, ddcm_subdir)
+                        ddcm_subdir = os.path.basename(compressed_dir)
+                        noisy_ddcm_dir = os.path.join(trial_subdir, ddcm_subdir)
                         os.makedirs(noisy_ddcm_dir, exist_ok=True)
-                        # Create noisy file in this subdirectory with the expected name
-                        noisy_file = os.path.join(noisy_ddcm_dir, f'{base_name}_noise_indices.bin')
+                        noisy_file = os.path.join(noisy_ddcm_dir, f'{base_name}_ber{ber}_trial{trial}_noise_indices.bin')
                     elif method == 'turbo_ddcm':
-                        # Turbo-DDCM needs compression_config.json in the same directory
+                        os.makedirs(trial_subdir, exist_ok=True)
                         config_source = os.path.join(compressed_dir, 'compression_config.json')
                         if os.path.exists(config_source):
-                            shutil.copy(config_source, os.path.join(temp_noisy_dir, 'compression_config.json'))
+                            shutil.copy(config_source, os.path.join(trial_subdir, 'compression_config.json'))
+                        noisy_file = os.path.join(trial_subdir, f'{base_name}_ber{ber}_trial{trial}{orig_ext}')
+                    else:
+                        os.makedirs(trial_subdir, exist_ok=True)
+                        noisy_file = os.path.join(trial_subdir, f'{base_name}_ber{ber}_trial{trial}{orig_ext}')
                     
                     num_bit_flips = 0
                     try:
+                        print(f"      [flip_bits] Reading: {os.path.basename(compressed_file)}, Writing: {os.path.basename(noisy_file)}")
                         num_bit_flips = flip_bits(compressed_file, ber, noisy_file)
+                        print(f"      [flip_bits] Result: {num_bit_flips} bit flips")
                     except Exception as e:
                         print(f"      ✗ Error flipping bits for {img_file} trial {trial} BER {ber}: {e}")
                         continue
                     
+                    print(f"      Decompressing image: {img_file} (trial {trial+1}, BER {ber})")
+                    decompress_start = time.time()
                     decompressed = None
                     decompression_success = False
                     error_reason = ''
-                    if method == 'jpeg':
+                    if method == 'ddcm':
+                        np_state_before_ddcm = np.random.get_state()
+                        decompressed, error_reason = decompress_ddcm(noisy_file, output_dir, project_root, resolution, image_name=img_file, ber=ber, trial=trial)
+                        np_state_after = np.random.get_state()
+                        state_changed = not np.array_equal(np_state_after[1], np_state_before_ddcm[1])  # type: ignore
+                        if state_changed:
+                            print(f"      [DDCM] Random state changed, restoring...")
+                        np.random.set_state(np_state_before_ddcm)
+                    elif method == 'jpeg':
+                        np_state_before_jpeg = np.random.get_state()
                         decompressed, error_reason = decompress_jpeg(noisy_file, resolution)
-                    elif method == 'ddcm':
-                        decompressed, error_reason = decompress_ddcm(noisy_file, output_dir, project_root, resolution)
+                        np_state_after = np.random.get_state()
+                        state_changed = not np.array_equal(np_state_after[1], np_state_before_jpeg[1])  # type: ignore
+                        if state_changed:
+                            print(f"      [JPEG] Random state changed, restoring...")
+                        np.random.set_state(np_state_before_jpeg)
                     elif method == 'turbo_ddcm':
-                        decompressed, error_reason = decompress_turbo_ddcm(noisy_file, output_dir, project_root, resolution)
+                        np_state_before_turbo_ddcm = np.random.get_state()
+                        decompressed, error_reason = decompress_turbo_ddcm(noisy_file, output_dir, project_root, resolution, image_name=img_file)
+                        np_state_after = np.random.get_state()
+                        state_changed = not np.array_equal(np_state_after[1], np_state_before_turbo_ddcm[1])  # type: ignore
+                        if state_changed:
+                            print(f"      [Turbo-DDCM] Random state changed, restoring...")
+                        np.random.set_state(np_state_before_turbo_ddcm)
+                    decompress_total_time = time.time() - decompress_start
+                    print(f"      Decompression time for {img_file} (trial {trial+1}): {decompress_total_time:.2f}s")
                     if decompressed is not None:
                         decompression_success = True
                     elif error_reason:
@@ -541,7 +640,10 @@ def simulate_noisy_channel(compressed_files, method, ber_values, num_trials, out
                         original = Image.open(original_path).convert('RGB')
                         original = original.resize((resolution, resolution))
                         try:
+                            start_time = time.time()
                             psnr_val = calculate_psnr(original, decompressed)
+                            psnr_time = time.time() - start_time
+                            print(f"      [Metrics] PSNR calculation time: {psnr_time:.4f}s")
                             if np.isnan(psnr_val):
                                 psnr_val = 'N/A'
                         except Exception as e:
@@ -549,14 +651,16 @@ def simulate_noisy_channel(compressed_files, method, ber_values, num_trials, out
                             print(f"      ✗ PSNR calculation error for {img_file} trial {trial}: {e}")
                         
                         try:
+                            start_time = time.time()
                             niqe_val = calculate_niqe(decompressed)
+                            niqe_time = time.time() - start_time
+                            print(f"      [Metrics] NIQE calculation time: {niqe_time:.4f}s")
                             if np.isnan(niqe_val):
                                 niqe_val = 'N/A'
                         except Exception as e:
                             niqe_val = 'N/A'
                             print(f"      ✗ NIQE calculation error for {img_file} trial {trial}: {e}")
                         
-                        # Save sample only if there were actual bit flips and we haven't reached the limit
                         if num_bit_flips > 0 and samples_saved[img_file] < num_samples_to_save:
                             sample_dir = os.path.join(output_dir, f'samples_ber{ber}')
                             os.makedirs(sample_dir, exist_ok=True)
@@ -578,26 +682,14 @@ def simulate_noisy_channel(compressed_files, method, ber_values, num_trials, out
                         'error_reason': error_reason
                     }
                     csv_writer.writerow(row)
-                    csv_file.flush()  # Ensure immediate write to disk
+                    csv_file.flush()
                     
-                    # Clean up noisy file immediately after use
-                    try:
-                        if os.path.exists(noisy_file):
-                            os.remove(noisy_file)
-                        # For DDCM, also clean up the subdirectory if empty
-                        if method == 'ddcm':
-                            ddcm_subdir = os.path.dirname(noisy_file)
-                            if os.path.exists(ddcm_subdir) and not os.listdir(ddcm_subdir):
-                                os.rmdir(ddcm_subdir)
-                    except Exception as e:
-                        print(f"      ✗ Error cleaning up noisy file {noisy_file}: {e}")
-                        pass
+                    cleanup_noisy_file(noisy_file, method)
+                    cleanup_temp_dirs(output_dir, method, base_name, ber, trial)
             print(f"  Completed BER {ber} ({ber_idx}/{len(ber_values)})")
     finally:
-        # Clean up temporary directory at the end
         try:
-            if os.path.exists(temp_noisy_dir):
-                shutil.rmtree(temp_noisy_dir)
+            safe_rmtree(temp_noisy_dir)
         except Exception as e:
             print(f"  ✗ Error cleaning up temporary directory {temp_noisy_dir}: {e}")
             pass
@@ -617,7 +709,6 @@ def main():
     parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
     args = parser.parse_args()
     
-    # Set random seeds for reproducibility
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
@@ -628,12 +719,9 @@ def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(script_dir)
     
-    # Note: sys.path is already set up at module level for DDCM and Turbo-DDCM imports
-    
     os.makedirs(args.output_dir, exist_ok=True)
     csv_path = os.path.join(args.output_dir, f'noisy_channel_results_{args.method}_bpp{args.bpp}.csv')
     
-    # Open CSV file in append mode, but write header if file doesn't exist
     file_exists = os.path.exists(csv_path)
     csv_file = open(csv_path, 'a', newline='')
     writer = csv.DictWriter(csv_file, fieldnames=['original_image_name', 'target_bpp', 'actual_bpp', 'BER', 'expected_bit_flips', 'actual_bit_flips', 'PSNR', 'NIQE', 'error_reason'])
@@ -661,10 +749,12 @@ def main():
         )
         
         ber_values = [10**-6, 10**-5, 10**-4, 10**-3, 10**-2, 10**-1]
+        print(f"BER values: {ber_values}")
+        print(f"\n{'='*60}")
         simulate_noisy_channel(
             compressed_files, args.method, ber_values, args.num_trials,
             args.output_dir, project_root, args.dataset, args.resolution,
-            args.num_samples_to_save_per_BER, args.bpp, writer, csv_file
+            args.num_samples_to_save_per_BER, args.bpp, writer, csv_file, base_seed=args.seed
         )
     finally:
         csv_file.close()

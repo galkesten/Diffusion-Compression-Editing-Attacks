@@ -43,7 +43,7 @@ CONDA_ENV=turbo_ddcm
 sbatch \
 	-p nlp\
 	-A nlp\
-	-x nlp-2080-1,nlp-2080-2,nlp-a40-1 \
+	-x nlp-2080-1,nlp-2080-2,nlp-a40-1\
 	-c $NUM_CORES \
 	--gres=gpu:$NUM_GPUS \
 	--job-name $JOB_NAME \
