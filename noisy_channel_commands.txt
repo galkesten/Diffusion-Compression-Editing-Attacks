@@ -157,62 +157,34 @@
 # ============================================================================
 # Analysis Commands (analyze_noisy_channel_results.py)
 # ============================================================================
-#
-# Arguments:
-#   --jpeg_csv: Path to JPEG results CSV file
-#   --turbo_csv: Path to Turbo-DDCM results CSV file
-#   --output_dir: Output directory for plots
-#   --bpp: BPP value (for output naming)
-#
-# Note: Run this after noisy_channel_experiment.py has completed
 
-# Analyze BPP 0.1 results
+
 python3 src/analyze_noisy_channel_results.py \
     --jpeg_csv results/noisy_channel_results/jpeg/noisy_channel_bpp0.1/noisy_channel_results_jpeg_bpp0.1.csv \
     --turbo_csv results/noisy_channel_results/turbo_ddcm/noisy_channel_bpp0.1/noisy_channel_results_turbo_ddcm_bpp0.1.csv \
+    --ddcm_csv results/noisy_channel_results/ddcm/noisy_channel_bpp0.1/first_half/noisy_channel_results_ddcm_bpp0.1.csv \
+                results/noisy_channel_results/ddcm/noisy_channel_bpp0.1/second_half/noisy_channel_results_ddcm_bpp0.1.csv \
+    --models ddcm turbo \
+    --ber_min 1e-6 \
+    --ber_max 1e-5 \
+    --output_dir results/noisy_channel_analysis/bpp0.1_focused \
+    --bpp 0.1
+
+
+python3 src/analyze_noisy_channel_results.py \
+    --jpeg_csv results/noisy_channel_results/jpeg/noisy_channel_bpp0.1/noisy_channel_results_jpeg_bpp0.1.csv \
+    --turbo_csv results/noisy_channel_results/turbo_ddcm/noisy_channel_bpp0.1/noisy_channel_results_turbo_ddcm_bpp0.1.csv \
+    --ddcm_csv results/noisy_channel_results/ddcm/noisy_channel_bpp0.1/first_half/noisy_channel_results_ddcm_bpp0.1.csv \
+                results/noisy_channel_results/ddcm/noisy_channel_bpp0.1/second_half/noisy_channel_results_ddcm_bpp0.1.csv \
+    --models ddcm turbo \
     --output_dir results/noisy_channel_analysis/bpp0.1 \
     --bpp 0.1
 
-# Analyze BPP 0.5 results
-python3 src/analyze_noisy_channel_results.py \
-    --jpeg_csv results/noisy_channel_results/jpeg/noisy_channel_bpp0.5/noisy_channel_results_jpeg_bpp0.5.csv \
-    --turbo_csv results/noisy_channel_results/turbo_ddcm/noisy_channel_bpp0.5/noisy_channel_results_turbo_ddcm_bpp0.5.csv \
-    --output_dir results/noisy_channel_analysis/bpp0.5 \
-    --bpp 0.5
 
-# Analyze BPP 1.0 results
+
 python3 src/analyze_noisy_channel_results.py \
     --jpeg_csv results/noisy_channel_results/jpeg/noisy_channel_bpp1.0/noisy_channel_results_jpeg_bpp1.0.csv \
     --turbo_csv results/noisy_channel_results/turbo_ddcm/noisy_channel_bpp1.0/noisy_channel_results_turbo_ddcm_bpp1.0.csv \
+    --models jpeg turbo \
     --output_dir results/noisy_channel_analysis/bpp1.0 \
     --bpp 1.0
-
-# ============================================================================
-# SLURM Batch Job Examples (using py-sbatch.sh)
-# ============================================================================
-
-# Example: Run JPEG BPP 0.1 as a SLURM job
-# ./py-sbatch.sh src/noisy_channel_experiment.py \
-#     --dataset dataset_Kodack24 \
-#     --resolution 512 \
-#     --method jpeg \
-#     --bpp 0.1 \
-#     --num_trials 50 \
-#     --params_csv results/compression_ratio_estimate/jpeg/jpeg_compression_params.csv \
-#     --num_samples_to_save_per_BER 5 \
-#     --output_dir results/noisy_channel_results/jpeg/noisy_channel_bpp0.1
-
-# ============================================================================
-# Notes:
-# ============================================================================
-# - BER values tested: 10^-6, 10^-5, 10^-4, 10^-3, 10^-2, 10^-1
-# - Results are saved to: {output_dir}/noisy_channel_results_{method}_bpp{bpp}.csv
-# - Sample images are saved to: {output_dir}/samples_ber{ber}/
-# - Compressed files are saved to: {output_dir}/
-# - Make sure compression params CSV files exist before running (run find_compression_params.py first)
-#
-# Analysis output:
-# - Per-image plots: {output_dir}/{metric}_per_image.png (6×4 grid, one per image)
-# - Averaged plots: {output_dir}/{metric}_averaged.png (mean across all images and trials)
-# - Error count plot: {output_dir}/error_counts.png (decoding failures per BER)
-
