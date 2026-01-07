@@ -27,12 +27,12 @@ def main(args):
         model_id = "CompVis/stable-diffusion-v1-4"
     else:
         resize_to = (512, 512)
-        model_id = "Manojb/stable-diffusion-2-1-base"
+        model_id = "stabilityai/stable-diffusion-2-1-base" # "Manojb/stable-diffusion-2-1-base"
 
     if test_img.shape[2:3] != torch.Size(resize_to):
         print(f"images will be resized to {resize_to}")
 
-    turbo_ddcm = TurboDDCM(model_id, args.T, args.K, args.M, args.seed, args.float32, device_str)
+    turbo_ddcm = TurboDDCM(model_id, args.T, args.K, args.M, args.old_protocol, args.seed, args.float32, device_str)
     runtimes = []
     for file_name in tqdm(target_files):
         img = utils.load_image(os.path.join(args.input_dir, file_name), resize_to, device_str)
@@ -75,6 +75,8 @@ if __name__ == '__main__':
 
     parser.add_argument('--save_reconstructions', action='store_true', default=False, help='Save reconstructions using the compression process')
     parser.add_argument('--save_runtimes', action='store_true', default=False, help='Save compression times in csv file')
+
+    parser.add_argument('--old_protocol', action='store_true', default=False)
     
     args = parser.parse_args()
 

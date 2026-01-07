@@ -9,7 +9,7 @@ class TurboDDCM():
     s_encoding_eta = 1
     s_denoising_eta = 0
 
-    def __init__(self, model_id, T, K, M, seed=42, float32=False, device='cuda'):
+    def __init__(self, model_id, T, K, M, old_protocol_ind, seed=42, float32=False, device='cuda'):
         self.device = 'cuda'
         self.seed = seed
         self.torch_dtype = torch.float32 if float32 else torch.float16
@@ -41,7 +41,7 @@ class TurboDDCM():
         self.C = 1 # as described in the paper - we use C=1
         self.no_bits_steps = TurboDDCM.get_no_bits_steps(self.T, self.K, self.M, self.C, self.H, self.W) # NBS
 
-        self.bit_stream_obj = BitStreamEncoder(self.K, self.M, self.C)
+        self.bit_stream_obj = BitStreamEncoder(self.K, self.M, self.C, old_protocol_ind)
 
     def compress(self, image, weight_pixel_vector):
         assert image.shape == torch.Size([1, 3, self.H, self.W])
