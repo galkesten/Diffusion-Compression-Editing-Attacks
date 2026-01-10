@@ -35,6 +35,8 @@ if __name__ == '__main__':
     parser.add_argument('--save_reconstructions', action='store_true', default=False, help='Save reconstructions')
     parser.add_argument('--save_runtimes', action='store_true', default=False, help='Save compression times in csv file')
 
+    parser.add_argument('--old_protocol', action='store_true', default=False)
+
     args = parser.parse_args()
     
     main(args)

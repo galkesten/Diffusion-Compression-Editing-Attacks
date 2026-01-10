@@ -10,18 +10,18 @@ from turbo_ddcm.turbo_ddcm import TurboDDCM
 from turbo_ddcm import utils
 
 
-# Model cache: keyed by (model_id, T, K, M, seed, device_str, float32)
+# Model cache: keyed by (model_id, T, K, M, old_protocol, seed, device_str, float32)
 _model_cache = {}
 
 
-def _get_cached_model(model_id, T, K, M, seed, float32, device_str):
+def _get_cached_model(model_id, T, K, M, old_protocol, seed, float32, device_str):
     """Get or load cached model."""
     global _model_cache
     
-    cache_key = (model_id, T, K, M, seed, device_str, float32)
+    cache_key = (model_id, T, K, M, old_protocol, seed, device_str, float32)
     
     if cache_key not in _model_cache:
-        turbo_ddcm = TurboDDCM(model_id, T, K, M, seed, float32, device_str)
+        turbo_ddcm = TurboDDCM(model_id, T, K, M, old_protocol, seed, float32, device_str)
         _model_cache[cache_key] = turbo_ddcm
         print(f"Loaded Turbo-DDCM model: {cache_key}")
     
@@ -29,7 +29,7 @@ def _get_cached_model(model_id, T, K, M, seed, float32, device_str):
 
 
 def compress_main_programmatic(input_dir, output_dir, M, gpu=0, float32=False, seed=88888888,
-                               T=20, K=16384, weights_dir=None, save_reconstructions=False, save_runtimes=False):
+                               T=20, K=16384, weights_dir=None, save_reconstructions=False, save_runtimes=False, old_protocol=False):
     device_str = f"cuda:{gpu}" if torch.cuda.is_available() else 'cpu'
     files = sorted(os.listdir(input_dir))
     target_files = [f for f in files if f.endswith('png')]
@@ -52,7 +52,7 @@ def compress_main_programmatic(input_dir, output_dir, M, gpu=0, float32=False, s
     if test_img.shape[2:3] != torch.Size(resize_to):
         print(f"images will be resized to {resize_to}")
 
-    turbo_ddcm = _get_cached_model(model_id, T, K, M, seed, float32, device_str)
+    turbo_ddcm = _get_cached_model(model_id, T, K, M, old_protocol, seed, float32, device_str)
     runtimes = []
     for file_name in tqdm(target_files):
         img = utils.load_image(os.path.join(input_dir, file_name), resize_to, device_str)
@@ -85,7 +85,8 @@ def compress_main_programmatic(input_dir, output_dir, M, gpu=0, float32=False, s
         'weights_dir': weights_dir,
         'save_reconstructions': save_reconstructions,
         'save_runtimes': save_runtimes,
-        'model_id': model_id
+        'model_id': model_id,
+        'old_protocol': old_protocol
     }
     with open(os.path.join(output_dir, 'compression_config.json'), 'w') as f:
         json.dump(config, f, indent=4)
@@ -103,8 +104,11 @@ def decompress_main_programmatic(input_dir, output_dir, gpu=0, save_runtimes=Fal
         compression_config = json.load(f)
     compression_config = Namespace(**compression_config)
     
+    # Handle old configs that may not have old_protocol flag
+    old_protocol = getattr(compression_config, 'old_protocol', False)
+    
     turbo_ddcm = _get_cached_model(compression_config.model_id, compression_config.T, compression_config.K, 
-                                   compression_config.M, compression_config.seed, compression_config.float32, device_str)
+                                   compression_config.M, old_protocol, compression_config.seed, compression_config.float32, device_str)
     runtimes = []
     for file_name in tqdm(target_files):
         encoding = utils.load_binary(os.path.join(input_dir, file_name))

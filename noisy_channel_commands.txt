@@ -3,7 +3,7 @@
 # Arguments:
 #   --dataset: Path to dataset directory containing PNG images
 #   --resolution: Image resolution (default: 512, only choice: 512)
-#   --method: Compression method (choices: jpeg, ddcm, turbo_ddcm)
+#   --method: Compression method (choices: jpeg, ddcm, turbo_ddcm, turbo_ddcm_old_protocol)
 #   --bpp: Target bits per pixel (choices: 0.1, 0.5, 1.0)
 #   --num_trials: Number of trials per BER value
 #   --params_csv: Path to CSV file with compression parameters
@@ -153,6 +153,43 @@
     --params_csv results/compression_ratio_estimate/turbo_ddcm/turbo_ddcm_theoretical_bpp.csv \
     --num_samples_to_save_per_BER 5 \
     --output_dir results/noisy_channel_results/turbo_ddcm/noisy_channel_bpp1.0
+
+# ============================================================================
+# Turbo-DDCM Old Protocol Examples
+# ============================================================================
+
+# Turbo-DDCM Old Protocol, BPP 0.1
+./py-sbatch.sh src/noisy_channel_experiment.py \
+    --dataset dataset_Kodack24 \
+    --resolution 512 \
+    --method turbo_ddcm_old_protocol \
+    --bpp 0.1 \
+    --num_trials 50 \
+    --params_csv results/compression_ratio_estimate/turbo_ddcm_old_protocol/turbo_ddcm_old_protocol_actual_bpp.csv \
+    --num_samples_to_save_per_BER 5 \
+    --output_dir results/noisy_channel_results/turbo_ddcm_old_protocol/noisy_channel_bpp0.1
+
+# Turbo-DDCM Old Protocol, BPP 0.5
+./py-sbatch.sh src/noisy_channel_experiment.py \
+    --dataset dataset_Kodack24 \
+    --resolution 512 \
+    --method turbo_ddcm_old_protocol \
+    --bpp 0.5 \
+    --num_trials 50 \
+    --params_csv results/compression_ratio_estimate/turbo_ddcm_old_protocol/turbo_ddcm_old_protocol_actual_bpp.csv \
+    --num_samples_to_save_per_BER 5 \
+    --output_dir results/noisy_channel_results/turbo_ddcm_old_protocol/noisy_channel_bpp0.5
+
+# Turbo-DDCM Old Protocol, BPP 1.0
+./py-sbatch.sh src/noisy_channel_experiment.py \
+    --dataset dataset_Kodack24 \
+    --resolution 512 \
+    --method turbo_ddcm_old_protocol \
+    --bpp 1.0 \
+    --num_trials 50 \
+    --params_csv results/compression_ratio_estimate/turbo_ddcm_old_protocol/turbo_ddcm_old_protocol_actual_bpp.csv \
+    --num_samples_to_save_per_BER 5 \
+    --output_dir results/noisy_channel_results/turbo_ddcm_old_protocol/noisy_channel_bpp1.0
 
 # ============================================================================
 # Analysis Commands (analyze_noisy_channel_results.py)
