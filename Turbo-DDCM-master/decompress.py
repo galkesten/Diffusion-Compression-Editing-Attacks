@@ -23,7 +23,8 @@ def main(args):
     compression_config = Namespace(**compression_config)
     
     turbo_ddcm = TurboDDCM(compression_config.model_id, compression_config.T, compression_config.K, compression_config.M,
-                           compression_config.old_protocol, compression_config.seed, compression_config.float32, device_str)
+                           compression_config.old_protocol, compression_config.seed, compression_config.float32, device_str,
+                           args.manual_list_ind)
     runtimes = []
     for file_name in tqdm(target_files):
         encoding = utils.load_binary(os.path.join(args.input_dir, file_name))
@@ -59,6 +60,8 @@ if __name__ == '__main__':
     parser.add_argument('--save_runtimes', action='store_true', default=False, help='Save decompression times in csv file')
 
     parser.add_argument('--old_protocol', action='store_true', default=False)
+
+    parser.add_argument('--manual_list_ind', action='store_true', default=False)
     
     args = parser.parse_args()
     

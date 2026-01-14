@@ -32,7 +32,8 @@ def main(args):
     if test_img.shape[2:3] != torch.Size(resize_to):
         print(f"images will be resized to {resize_to}")
 
-    turbo_ddcm = TurboDDCM(model_id, args.T, args.K, args.M, args.old_protocol, args.seed, args.float32, device_str)
+    turbo_ddcm = TurboDDCM(model_id, args.T, args.K, args.M, args.old_protocol, args.seed, args.float32, device_str,
+                           args.manual_list_ind)
     runtimes = []
     for file_name in tqdm(target_files):
         img = utils.load_image(os.path.join(args.input_dir, file_name), resize_to, device_str)
@@ -77,6 +78,8 @@ if __name__ == '__main__':
     parser.add_argument('--save_runtimes', action='store_true', default=False, help='Save compression times in csv file')
 
     parser.add_argument('--old_protocol', action='store_true', default=False)
+
+    parser.add_argument('--manual_list_ind', action='store_true', default=False)
     
     args = parser.parse_args()
 

@@ -4,13 +4,23 @@ from diffusers import StableDiffusionPipeline, DDIMScheduler
 import turbo_ddcm.utils as utils
 
 class DDPM:
-    def __init__(self, model_id, torch_dtype, T, device='cuda', seed=42):
+    s_manual_list_timesteps = [999, 834, 704, 591, 520, 455, 410, 353, 313, 269, 231, 204, 175, 156, 135, 118, 101, 90, 76, 66, 54, 45, 40, 34, 29, 23, 18, 12, 7, 1]
+
+    def __init__(self, model_id, torch_dtype, T, device='cuda', seed=42, manual_list_ind=False):
         self.device = device
         self.seed = seed
+        self.torch_dtype = torch_dtype
         self.model = StableDiffusionPipeline.from_pretrained(model_id, torch_dtype=torch_dtype).to(device=device)
         self.model.scheduler = DDIMScheduler.from_pretrained(model_id, subfolder='scheduler', timestep_spacing='linspace', device=device, torch_dtype=torch_dtype)
-        self.scheduler_initialized = False
-        self.model.scheduler.set_timesteps(T)
+        # self.scheduler_initialized = False
+
+        if manual_list_ind:
+            assert T == len(DDPM.s_manual_list_timesteps)
+            assert T == 30, "there is a pre-defined manual list for T=30 only"
+            self.model.scheduler.num_inference_steps = T
+            self.model.scheduler.timesteps = torch.tensor(DDPM.s_manual_list_timesteps, device=self.device, dtype=torch_dtype)
+        else:
+            self.model.scheduler.set_timesteps(T)
 
     def encode_image(self, img):
         utils.set_seed(self.seed)
@@ -26,6 +36,18 @@ class DDPM:
         with torch.no_grad():
             prompt_embeds, negative_prompt_embeds = self.model.encode_prompt(prompt, self.device, 1, do_classifier_free_guidance=False)
         return prompt_embeds
+
+    def get_timesteps(self):
+        return self.model.scheduler.timesteps
+
+    def get_prev_timestep(self, timestep):
+        timesteps: torch.Tensor = self.get_timesteps()
+        idx = torch.where(timesteps == timestep)[0].item()
+
+        if idx + 1 == timesteps.numel():
+            return torch.tensor(0, device=self.device, dtype=self.torch_dtype)
+
+        return timesteps[idx + 1]
 
     def predict_noise(self, x_t: torch.Tensor, timestep, text_encoding):
         with torch.no_grad():
@@ -44,7 +66,7 @@ class DDPM:
 
     def x_0_hat_by_denoise_result(self, sample, noise_prediction, timestep):
         # 1. compute alphas, betas
-        alpha_prod_t = self.model.scheduler.alphas_cumprod[timestep]
+        alpha_prod_t = self.model.scheduler.alphas_cumprod[int(timestep.item())]
         beta_prod_t = 1 - alpha_prod_t
         # 2. compute predicted original sample from predicted noise also called
         # "predicted x_0" of formula (12) from https://arxiv.org/pdf/2010.02502.pdf
@@ -52,12 +74,10 @@ class DDPM:
         return pred_original_sample
 
     def get_variance(self, timestep):
-        prev_timestep = (
-                timestep - self.model.scheduler.config.num_train_timesteps //
-                self.model.scheduler.num_inference_steps)
-        alpha_prod_t = self.model.scheduler.alphas_cumprod[timestep]
+        prev_timestep = self.get_prev_timestep(timestep)
+        alpha_prod_t = self.model.scheduler.alphas_cumprod[int(timestep.item())]
         alpha_prod_t_prev = self.model.scheduler.alphas_cumprod[
-            prev_timestep] if prev_timestep >= 0 else self.model.scheduler.final_alpha_cumprod
+            int(prev_timestep.item())] if prev_timestep >= 0 else self.model.scheduler.final_alpha_cumprod
         beta_prod_t = 1 - alpha_prod_t
         beta_prod_t_prev = 1 - alpha_prod_t_prev
         variance = (beta_prod_t_prev / beta_prod_t) * (1 - alpha_prod_t / alpha_prod_t_prev)
@@ -65,12 +85,10 @@ class DDPM:
 
     def reverse_step(self, model_output, timestep, sample, eta, variance_noise=None, pred_original_sample=None):
         # 1. get previous step value (=t-1)
-        prev_timestep = (
-                timestep - self.model.scheduler.config.num_train_timesteps //
-                self.model.scheduler.num_inference_steps)
+        prev_timestep = self.get_prev_timestep(timestep)
         # 2. compute alphas, betas
-        alpha_prod_t = self.model.scheduler.alphas_cumprod[timestep]
-        alpha_prod_t_prev = self.model.scheduler.alphas_cumprod[prev_timestep] if prev_timestep >= 0 else self.model.scheduler.final_alpha_cumprod
+        alpha_prod_t = self.model.scheduler.alphas_cumprod[int(timestep.item())]
+        alpha_prod_t_prev = self.model.scheduler.alphas_cumprod[int(prev_timestep.item())] if prev_timestep.item() >= 0 else self.model.scheduler.final_alpha_cumprod
 
         if pred_original_sample is None:
             beta_prod_t = 1 - alpha_prod_t
@@ -103,4 +121,4 @@ class DDPM:
             sigma_z = eta * variance ** (0.5) * variance_noise
             prev_sample = prev_sample + sigma_z
 
-        return prev_sample
+        return prev_sample.to(self.torch_dtype)
