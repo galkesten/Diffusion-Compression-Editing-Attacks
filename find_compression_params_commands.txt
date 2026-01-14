@@ -1,0 +1,109 @@
+# Commands for find_compression_params.py
+# 
+# This script finds compression parameters for different algorithms (JPEG, DDCM, Turbo-DDCM, Turbo-DDCM Old Protocol)
+#
+# Arguments:
+#   --algorithms: Algorithms to run (choices: jpeg, ddcm, turbo_ddcm, turbo_ddcm_old_protocol, all)
+#   --bpp: Target bits per pixel values (choices: 0.1, 0.5, 1.0)
+#   --dataset: Path to dataset directory (default: dataset_Kodack24 in project root)
+#   --num_samples: Number of sample images for DDCM/Turbo-DDCM experiments (default: 2)
+#
+# Output: Results saved in results/compression_ratio_estimate/{algorithm}/
+
+# ============================================================================
+# Run All Algorithms (Default)
+# ============================================================================
+
+# Run all algorithms with all BPP values
+python src/find_compression_params.py
+
+# Run all algorithms with specific BPP values
+python src/find_compression_params.py --bpp 0.5 1.0
+
+# Run all algorithms with custom dataset
+python src/find_compression_params.py --dataset dataset_Kodack24_first_half
+
+# Run all algorithms with more sample images
+python src/find_compression_params.py --num_samples 5
+
+# ============================================================================
+# JPEG Only
+# ============================================================================
+
+# JPEG, all BPP values
+python src/find_compression_params.py --algorithms jpeg
+
+# JPEG, specific BPP values
+python src/find_compression_params.py --algorithms jpeg --bpp 1.0
+
+# JPEG, custom dataset
+python src/find_compression_params.py --algorithms jpeg --dataset dataset_Kodack24_first_half
+
+# ============================================================================
+# DDCM Only
+# ============================================================================
+
+# DDCM, all BPP values
+python src/find_compression_params.py --algorithms ddcm
+
+# DDCM, specific BPP values
+python src/find_compression_params.py --algorithms ddcm --bpp 0.5 1.0
+
+# DDCM, custom dataset and sample count
+python src/find_compression_params.py --algorithms ddcm --dataset dataset_Kodack24 --num_samples 3
+
+# ============================================================================
+# Turbo-DDCM Only
+# ============================================================================
+
+# Turbo-DDCM, all BPP values
+python src/find_compression_params.py --algorithms turbo_ddcm
+
+# Turbo-DDCM, specific BPP values
+python src/find_compression_params.py --algorithms turbo_ddcm --bpp 1.0
+
+# Turbo-DDCM, custom dataset and sample count
+python src/find_compression_params.py --algorithms turbo_ddcm --dataset dataset_Kodack24 --num_samples 5
+
+# ============================================================================
+# Turbo-DDCM Old Protocol Only
+# ============================================================================
+
+# Turbo-DDCM Old Protocol, all BPP values
+python src/find_compression_params.py --algorithms turbo_ddcm_old_protocol
+
+# Turbo-DDCM Old Protocol, specific BPP values
+python src/find_compression_params.py --algorithms turbo_ddcm_old_protocol --bpp 0.5 1.0
+
+# Turbo-DDCM Old Protocol, custom dataset and sample count
+python src/find_compression_params.py --algorithms turbo_ddcm_old_protocol --dataset dataset_Kodack24 --num_samples 3
+
+# ============================================================================
+# Multiple Algorithms (Selected)
+# ============================================================================
+
+# Run JPEG and Turbo-DDCM only
+python src/find_compression_params.py --algorithms jpeg turbo_ddcm
+
+# Run both Turbo-DDCM variants
+python src/find_compression_params.py --algorithms turbo_ddcm turbo_ddcm_old_protocol
+
+# Run JPEG, Turbo-DDCM, and Turbo-DDCM Old Protocol
+python src/find_compression_params.py --algorithms jpeg turbo_ddcm turbo_ddcm_old_protocol --bpp 1.0
+
+# Run DDCM and both Turbo-DDCM variants
+python src/find_compression_params.py --algorithms ddcm turbo_ddcm turbo_ddcm_old_protocol
+
+# ============================================================================
+# Slurm/Cluster Examples (if using py-sbatch.sh)
+# ============================================================================
+
+# Run all algorithms on cluster
+./py-sbatch.sh src/find_compression_params.py
+
+# Run Turbo-DDCM old protocol only on cluster
+./py-sbatch.sh src/find_compression_params.py --algorithms turbo_ddcm_old_protocol
+
+# Run multiple algorithms with specific BPP on cluster
+./py-sbatch.sh src/find_compression_params.py --algorithms turbo_ddcm turbo_ddcm_old_protocol --bpp 1.0
+

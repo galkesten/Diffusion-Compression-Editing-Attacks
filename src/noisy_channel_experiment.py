@@ -64,7 +64,7 @@ def cleanup_temp_dirs(output_dir, method, base_name, ber=None, trial=None):
                 os.path.join(output_dir, f'temp_ddcm_input_{base_name}'),
                 os.path.join(output_dir, f'temp_decomp_{base_name}')
             ]
-    elif method == 'turbo_ddcm':
+    elif method in ['turbo_ddcm', 'turbo_ddcm_old_protocol']:
         temp_patterns = [
             os.path.join(output_dir, f'temp_turbo_ddcm_input_{base_name}'),
             os.path.join(output_dir, f'temp_decomp_{base_name}')
@@ -107,6 +107,20 @@ def load_ddcm_params(csv_path, target_bpp):
 
 
 def load_turbo_ddcm_params(csv_path, target_bpp):
+    df = pd.read_csv(csv_path)
+    df = df[df['target_bpp'] == target_bpp]
+    if len(df) == 0:
+        return None
+    row = df.iloc[0]
+    return {
+        'M': int(row['M']),
+        'T': int(row['T']),
+        'K': int(row['K']),
+        'C': int(row['C'])
+    }
+
+
+def load_turbo_ddcm_old_protocol_params(csv_path, target_bpp):
     df = pd.read_csv(csv_path)
     df = df[df['target_bpp'] == target_bpp]
     if len(df) == 0:
@@ -250,12 +264,13 @@ def decompress_ddcm(bin_file, output_dir, project_root, resolution=512, image_na
         safe_rmtree(temp_output)
 
 
-def compress_turbo_ddcm(img_path, params, output_dir, project_root, resolution=512):
+def compress_turbo_ddcm(img_path, params, output_dir, project_root, resolution=512, old_protocol=False):
     temp_input = os.path.join(output_dir, 'temp_input')
-    print(f"    [Turbo-DDCM compress] Creating temp_input dir: {temp_input}")
+    protocol_name = 'Turbo-DDCM (old protocol)' if old_protocol else 'Turbo-DDCM'
+    print(f"    [{protocol_name} compress] Creating temp_input dir: {temp_input}")
     os.makedirs(temp_input, exist_ok=True)
     shutil.copy(img_path, os.path.join(temp_input, os.path.basename(img_path)))
-    print(f"    [Turbo-DDCM compress] Copied {os.path.basename(img_path)} to temp_input")
+    print(f"    [{protocol_name} compress] Copied {os.path.basename(img_path)} to temp_input")
     
     M = params['M']
     T = params['T']
@@ -276,10 +291,11 @@ def compress_turbo_ddcm(img_path, params, output_dir, project_root, resolution=5
             K=K,
             weights_dir=None,
             save_reconstructions=False,
-            save_runtimes=False
+            save_runtimes=False,
+            old_protocol=old_protocol
         )
         compress_time = time.time() - start_time
-        print(f"    [Turbo-DDCM compress] Compression time: {compress_time:.2f}s")
+        print(f"    [{protocol_name} compress] Compression time: {compress_time:.2f}s")
         base_name = os.path.splitext(os.path.basename(img_path))[0]
         bin_file = os.path.join(output_dir, f'{base_name}{utils.BIN_SUFFIX}')
         return bin_file if os.path.exists(bin_file) else None
@@ -427,6 +443,8 @@ def compress_all_images(dataset_path, method, target_bpp, params_csv, resolution
         params = load_ddcm_params(params_csv, target_bpp)
     elif method == 'turbo_ddcm':
         params = load_turbo_ddcm_params(params_csv, target_bpp)
+    elif method == 'turbo_ddcm_old_protocol':
+        params = load_turbo_ddcm_old_protocol_params(params_csv, target_bpp)
     
     compressed_files = {}
     for idx, img_file in enumerate(images, 1):
@@ -445,7 +463,10 @@ def compress_all_images(dataset_path, method, target_bpp, params_csv, resolution
             bin_file = compress_ddcm(img_path, params, output_dir, project_root, resolution)
             compressed_files[img_file] = bin_file
         elif method == 'turbo_ddcm' and params is not None:
-            bin_file = compress_turbo_ddcm(img_path, params, output_dir, project_root, resolution)
+            bin_file = compress_turbo_ddcm(img_path, params, output_dir, project_root, resolution, old_protocol=False)
+            compressed_files[img_file] = bin_file
+        elif method == 'turbo_ddcm_old_protocol' and params is not None:
+            bin_file = compress_turbo_ddcm(img_path, params, output_dir, project_root, resolution, old_protocol=True)
             compressed_files[img_file] = bin_file
         compress_total_time = time.time() - compress_start
         print(f"    ✓ Compression complete for {img_file}: {compress_total_time:.2f}s")
@@ -476,7 +497,7 @@ def measure_baseline_metrics(dataset_path, compressed_files, method, output_dir,
             decompressed, error_reason = decompress_jpeg(compressed_file, resolution)
         elif method == 'ddcm':
             decompressed, error_reason = decompress_ddcm(compressed_file, output_dir, project_root, resolution, image_name=img_file)
-        elif method == 'turbo_ddcm':
+        elif method in ['turbo_ddcm', 'turbo_ddcm_old_protocol']:
             decompressed, error_reason = decompress_turbo_ddcm(compressed_file, output_dir, project_root, resolution, image_name=img_file)
         decompress_total_time = time.time() - decompress_start
         print(f"    Decompression time for {img_file}: {decompress_total_time:.2f}s")
@@ -576,7 +597,7 @@ def simulate_noisy_channel(compressed_files, method, ber_values, num_trials, out
                         noisy_ddcm_dir = os.path.join(trial_subdir, ddcm_subdir)
                         os.makedirs(noisy_ddcm_dir, exist_ok=True)
                         noisy_file = os.path.join(noisy_ddcm_dir, f'{base_name}_ber{ber}_trial{trial}_noise_indices.bin')
-                    elif method == 'turbo_ddcm':
+                    elif method in ['turbo_ddcm', 'turbo_ddcm_old_protocol']:
                         os.makedirs(trial_subdir, exist_ok=True)
                         config_source = os.path.join(compressed_dir, 'compression_config.json')
                         if os.path.exists(config_source):
@@ -616,7 +637,7 @@ def simulate_noisy_channel(compressed_files, method, ber_values, num_trials, out
                         if state_changed:
                             print(f"      [JPEG] Random state changed, restoring...")
                         np.random.set_state(np_state_before_jpeg)
-                    elif method == 'turbo_ddcm':
+                    elif method in ['turbo_ddcm', 'turbo_ddcm_old_protocol']:
                         np_state_before_turbo_ddcm = np.random.get_state()
                         decompressed, error_reason = decompress_turbo_ddcm(noisy_file, output_dir, project_root, resolution, image_name=img_file)
                         np_state_after = np.random.get_state()
@@ -700,7 +721,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset', required=True)
     parser.add_argument('--resolution', type=int, default=512, choices=[512])
-    parser.add_argument('--method', required=True, choices=['jpeg', 'ddcm', 'turbo_ddcm'])
+    parser.add_argument('--method', required=True, choices=['jpeg', 'ddcm', 'turbo_ddcm', 'turbo_ddcm_old_protocol'])
     parser.add_argument('--bpp', type=float, required=True, choices=[0.1, 0.5, 1.0])
     parser.add_argument('--num_trials', type=int, required=True)
     parser.add_argument('--params_csv', required=True)

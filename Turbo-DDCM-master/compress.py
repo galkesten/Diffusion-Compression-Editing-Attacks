@@ -27,7 +27,7 @@ def main(args):
         model_id = "CompVis/stable-diffusion-v1-4"
     else:
         resize_to = (512, 512)
-        model_id = "stabilityai/stable-diffusion-2-1-base" # "Manojb/stable-diffusion-2-1-base"
+        model_id = "Manojb/stable-diffusion-2-1-base"#"stabilityai/stable-diffusion-2-1-base" # "Manojb/stable-diffusion-2-1-base"
 
     if test_img.shape[2:3] != torch.Size(resize_to):
         print(f"images will be resized to {resize_to}")
