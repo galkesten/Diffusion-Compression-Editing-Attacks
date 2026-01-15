@@ -57,10 +57,27 @@ def turbo_ddcm_bpp_old_protocol(T, K, M, C, NBS, img_height, img_width):
     """Calculate BPP for Turbo-DDCM using old protocol encoding."""
     import math
     # Old protocol: M * (ceil(log2(K)) + C) bits per iteration
+    
+    
     bits_per_iteration = M * (math.ceil(math.log2(K)) + C)
     bits = (T - NBS - 1) * bits_per_iteration
     bpp = bits / (img_height * img_width)
     return round(bpp, 8)
+
+def turbo_ddcm_bpp_new_protocol_improved_psnr(T, K, M, C, img_height, img_width):
+
+    bpp = turbo_ddcm_bpp_old_protocol(T, K, M, C, 0, img_height, img_width)
+    bins = torch.logspace(
+    start=torch.log10(torch.tensor(0.01)), end=torch.log10(torch.tensor(0.15)), steps=70)
+
+
+    nbs = torch.max(torch.tensor(0),
+                torch.min(torch.tensor(T - 2),
+                            # NBS <= T - 2 (we have to do one step with bits and we have one DDIM step
+                            # either way at the end of the DDPM process).
+                            70 - torch.bucketize(bpp, bins) - 1)).item()
+    
+    return turbo_ddcm_bpp_old_protocol(T, K, M, C, nbs, img_height, img_width)
 
 def find_turbo_ddcm_M_for_bpp_old_protocol(target_bpp, T, K, C):
     img_height, img_width = 512, 512
@@ -71,6 +88,27 @@ def find_turbo_ddcm_M_for_bpp_old_protocol(target_bpp, T, K, C):
         mid = (low + high) // 2
         try:
             bpp = turbo_ddcm_bpp_old_protocol(T, K, mid, C, 0, img_height, img_width)
+            diff = abs(bpp - target_bpp)
+            if diff < best_diff:
+                best_diff = diff
+                best_M = mid
+            if bpp < target_bpp:
+                low = mid + 1
+            else:
+                high = mid - 1
+        except:
+            high = mid - 1
+    return best_M
+
+def find_turbo_ddcm_M_for_bpp_old_protocol_improved_psnr(target_bpp, T, K, C):
+    img_height, img_width = 512, 512
+    
+    low, high = 1, min(K, 10000)
+    best_M, best_diff = 1, float('inf')
+    for _ in range(30):
+        mid = (low + high) // 2
+        try:
+            bpp = turbo_ddcm_bpp_new_protocol_improved_psnr(T, K, mid, C, img_height, img_width)
             diff = abs(bpp - target_bpp)
             if diff < best_diff:
                 best_diff = diff
@@ -229,8 +267,8 @@ def run_turbo_ddcm_experiment(dataset_path, sample_images, target_bpps, project_
     
     return turbo_ddcm_Ms, T, K, turbo_ddcm_actual_bpps
 
-def run_turbo_ddcm_old_protocol_experiment(dataset_path, sample_images, target_bpps, project_root, theoretical_csv_path, actual_csv_path):
-    T = 20
+def run_turbo_ddcm_old_protocol_experiment(dataset_path, sample_images, target_bpps, project_root, theoretical_csv_path, actual_csv_path, manual_list_ind=False):
+    T = 30 if manual_list_ind else 20
     K = 16384
     C = 1
     seed = 88888888
@@ -241,9 +279,9 @@ def run_turbo_ddcm_old_protocol_experiment(dataset_path, sample_images, target_b
     turbo_ddcm_actual_bpps = {}
     
     for target_bpp in target_bpps:
-        M = find_turbo_ddcm_M_for_bpp_old_protocol(target_bpp, T, K, C)
+        M = find_turbo_ddcm_M_for_bpp_old_protocol_improved_psnr(target_bpp, T, K, C) if manual_list_ind else find_turbo_ddcm_M_for_bpp_old_protocol(target_bpp, T, K, C)
         turbo_ddcm_Ms[target_bpp] = M
-        theoretical_bpp = turbo_ddcm_bpp_old_protocol(T, K, M, C, 0, img_height, img_width)
+        theoretical_bpp = turbo_ddcm_bpp_new_protocol_improved_psnr(T, K, M, C, img_height, img_width) if manual_list_ind else turbo_ddcm_bpp_old_protocol(T, K, M, C, 0, img_height, img_width)
         append_to_turbo_ddcm_old_protocol_theoretical_csv(theoretical_csv_path, target_bpp, M, theoretical_bpp, T, K, C)
     
     results_dir = os.path.join(project_root, 'results', 'compression_ratio_estimate', 'turbo_ddcm_old_protocol')
@@ -276,6 +314,8 @@ def run_turbo_ddcm_old_protocol_experiment(dataset_path, sample_images, target_b
             '--old_protocol',
             '--save_reconstructions'
         ]
+        if manual_list_ind:
+            cmd.append('--manual_list_ind')
         subprocess.run(cmd, check=True, cwd=turbo_ddcm_path)
         
         actual_bpps = []
@@ -485,6 +525,8 @@ def main():
                        help='Path to dataset directory (default: dataset_Kodack24 in project root)')
     parser.add_argument('--num_samples', type=int, default=2,
                        help='Number of sample images to use for DDCM and Turbo-DDCM experiments (default: 2)')
+    parser.add_argument('--manual_list_ind', action='store_true', default=False,
+                       help='Use manual list index for Turbo-DDCM (default: False)')
     
     args = parser.parse_args()
     
@@ -556,7 +598,7 @@ def main():
         print(f"\n{'='*60}")
         print(f"Running Turbo-DDCM Old Protocol experiments")
         print(f"{'='*60}")
-        turbo_ddcm_old_protocol_Ms, T_old, K_old, turbo_ddcm_old_protocol_actual_bpps = run_turbo_ddcm_old_protocol_experiment(dataset_path, sample_images, target_bpps, project_root, turbo_ddcm_old_protocol_theoretical_csv, turbo_ddcm_old_protocol_actual_csv)
+        turbo_ddcm_old_protocol_Ms, T_old, K_old, turbo_ddcm_old_protocol_actual_bpps = run_turbo_ddcm_old_protocol_experiment(dataset_path, sample_images, target_bpps, project_root, turbo_ddcm_old_protocol_theoretical_csv, turbo_ddcm_old_protocol_actual_csv, args.manual_list_ind)
         print(f"✓ Turbo-DDCM Old Protocol experiments complete")
     
     print(f"\n{'='*60}")

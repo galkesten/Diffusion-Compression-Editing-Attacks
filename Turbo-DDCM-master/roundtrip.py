@@ -37,6 +37,8 @@ if __name__ == '__main__':
 
     parser.add_argument('--old_protocol', action='store_true', default=False)
 
+    parser.add_argument('--manual_list_ind', action='store_true', default=False)
+
     args = parser.parse_args()
     
     main(args)
