@@ -225,3 +225,48 @@ python3 src/analyze_noisy_channel_results.py \
     --models jpeg turbo \
     --output_dir results/noisy_channel_analysis/bpp1.0 \
     --bpp 1.0
+
+
+
+
+python3 src/analyze_noisy_channel_results.py \
+    --jpeg_csv results/noisy_channel_results/jpeg/noisy_channel_bpp0.1/noisy_channel_results_jpeg_bpp0.1.csv \
+    --turbo_csv results/noisy_channel_results/turbo_ddcm_old_protocol/noisy_channel_bpp0.1/noisy_channel_results_turbo_ddcm_old_protocol_bpp0.1.csv \
+    --ddcm_csv results/noisy_channel_results/ddcm/noisy_channel_bpp0.1/first_half/noisy_channel_results_ddcm_bpp0.1.csv \
+                results/noisy_channel_results/ddcm/noisy_channel_bpp0.1/second_half/noisy_channel_results_ddcm_bpp0.1.csv \
+    --models  turbo ddcm\
+    --output_dir results/noisy_channel_analysis/bpp0.1_turbo_old \
+    --bpp 0.1
+
+
+
+
+python3 src/analyze_noisy_channel_results.py \
+    --jpeg_csv results/noisy_channel_results/jpeg/noisy_channel_bpp0.1/noisy_channel_results_jpeg_bpp0.1.csv \
+    --turbo_csv results/noisy_channel_results/turbo_ddcm_old_protocol/noisy_channel_bpp0.1/noisy_channel_results_turbo_ddcm_old_protocol_bpp0.1.csv \
+    --ddcm_csv results/noisy_channel_results/ddcm/noisy_channel_bpp0.1/first_half/noisy_channel_results_ddcm_bpp0.1.csv \
+                results/noisy_channel_results/ddcm/noisy_channel_bpp0.1/second_half/noisy_channel_results_ddcm_bpp0.1.csv \
+    --models  turbo\
+    --output_dir results/noisy_channel_analysis/bpp0.5_turbo_old \
+    --bpp 0.5
+
+
+
+python3 src/analyze_noisy_channel_results.py \
+    --jpeg_csv results/noisy_channel_results/jpeg/noisy_channel_bpp1.0/noisy_channel_results_jpeg_bpp1.0.csv \
+     --turbo_csv results/noisy_channel_results/turbo_ddcm_old_protocol/noisy_channel_bpp0.1/noisy_channel_results_turbo_ddcm_old_protocol_bpp0.1.csv \
+    --models jpeg turbo \
+    --output_dir results/noisy_channel_analysis/bpp1.0_old_protocol\
+    --bpp 1.0
+
+
+
+
+
+python3 src/analyze_noisy_channel_results.py \
+    --jpeg_csv results/noisy_channel_results/jpeg/noisy_channel_bpp1.0/noisy_channel_results_jpeg_bpp1.0.csv \
+    --turbo_csv results/noisy_channel_results/turbo_ddcm_old_protocol/noisy_channel_bpp0.1/noisy_channel_results_turbo_ddcm_old_protocol_bpp0.1.csv \
+    --ddcm_csv results/noisy_channel_results/ddcm/noisy_channel_bpp0.1/first_half/noisy_channel_results_ddcm_bpp0.1.csv \
+                results/noisy_channel_results/ddcm/noisy_channel_bpp0.1/second_half/noisy_channel_results_ddcm_bpp0.1.csv \
+    --models  turbo ddcm jpeg\
+    --output_dir results/noisy_channel_analysis/ddcm_turbo_0.1_jpeg_1 

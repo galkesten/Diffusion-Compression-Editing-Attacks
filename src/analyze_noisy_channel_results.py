@@ -487,8 +487,6 @@ def main():
                        help='Path(s) to DDCM results CSV file(s). Can provide multiple files to concatenate (e.g., first_half and second_half)')
     parser.add_argument('--output_dir', type=str, required=True,
                        help='Output directory for plots')
-    parser.add_argument('--bpp', type=float, required=True,
-                       help='BPP value (for output naming)')
     parser.add_argument('--models', type=str, nargs='+', default=['jpeg', 'turbo', 'ddcm'],
                        choices=['jpeg', 'turbo', 'ddcm'],
                        help='Which models to include in plots (default: all)')

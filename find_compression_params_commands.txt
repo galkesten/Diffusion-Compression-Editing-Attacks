@@ -68,7 +68,7 @@ python src/find_compression_params.py --algorithms turbo_ddcm --dataset dataset_
 # ============================================================================
 # Turbo-DDCM Old Protocol Only
 # ============================================================================
-
+./py-sbatch.sh src/find_compression_params.py --algorithms turbo_ddcm_old_protocol --manual_list_ind
 # Turbo-DDCM Old Protocol, all BPP values
 python src/find_compression_params.py --algorithms turbo_ddcm_old_protocol
 
