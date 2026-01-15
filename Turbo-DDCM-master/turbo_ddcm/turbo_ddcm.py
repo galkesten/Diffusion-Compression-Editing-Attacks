@@ -39,7 +39,7 @@ class TurboDDCM():
         self.K = K
         self.M = M
         self.C = 1 # as described in the paper - we use C=1
-        self.no_bits_steps = TurboDDCM.get_no_bits_steps(self.T, self.K, self.M, self.C, self.H, self.W, manual_list_ind) # NBS
+        self.no_bits_steps = TurboDDCM.get_no_bits_steps(self.T, self.K, self.M, self.C, self.H, self.W, old_protocol_ind, manual_list_ind) # NBS
 
         self.bit_stream_obj = BitStreamEncoder(self.K, self.M, self.C, old_protocol_ind)
 
@@ -183,8 +183,12 @@ class TurboDDCM():
 
 
     @staticmethod
-    def get_no_bits_steps(T, K, M, C, H, W, manual_list_ind):
-        bpp = utils.turbo_ddcm_bpp(T, K, M, C, NBS=0, img_height=H, img_width=W) # assuming NBS is 0
+    def get_no_bits_steps(T, K, M, C, H, W, old_protocol_ind, manual_list_ind):
+        if old_protocol_ind:
+            bpp = utils.turbo_ddcm_bpp_old(T, K, M, C, NBS=0, img_height=H, img_width=W) # assuming NBS is 0
+        else:
+            bpp = utils.turbo_ddcm_bpp(T, K, M, C, NBS=0, img_height=H, img_width=W) # assuming NBS is 0
+
         if manual_list_ind:
             assert T == 30
             steps = 70 # hyperparam

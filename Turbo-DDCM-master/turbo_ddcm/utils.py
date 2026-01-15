@@ -80,6 +80,12 @@ def turbo_ddcm_bpp(T, K, M, C, NBS, img_height, img_width):
     bpp = bits / (img_height * img_width)
     return round(bpp, 8)
 
+def turbo_ddcm_bpp_old(T, K, M, C, NBS, img_height, img_width):
+    # (T - 1) since there is no noise addition on last step
+    bits = (T - NBS - 1) * (math.ceil(math.log2(K)) * M + (M - 1) * C)
+    bpp = bits / (img_height * img_width)
+    return round(bpp, 8)
+
 def save_decoded_img(filename, w_dec):
     os.makedirs(os.path.dirname(filename), exist_ok=True)
     plt.imsave(filename, clear_color(w_dec))
