@@ -120,7 +120,7 @@ def get_image_number(image_name):
         return 0
 
 
-def plot_per_image_results(jpeg_data, turbo_data, ddcm_data, models, output_dir, metric='PSNR'):
+def plot_per_image_results(jpeg_data, turbo_data, turbo_improved_data, ddcm_data, models, output_dir, metric='PSNR'):
     """Create 6×4 grid of subplots, one per image, showing metric vs BER.
     
     Grouping: For each image, group by BER value, then average across all trials.
@@ -131,13 +131,14 @@ def plot_per_image_results(jpeg_data, turbo_data, ddcm_data, models, output_dir,
     
     all_images = sorted(set([d['image'] for d in jpeg_data] + 
                            [d['image'] for d in turbo_data] + 
+                           [d['image'] for d in turbo_improved_data] +
                            [d['image'] for d in ddcm_data]),
                        key=get_image_number)
     
     metric_key = metric.lower()
-    colors = {'jpeg': 'blue', 'turbo': 'red', 'ddcm': 'green'}
-    markers = {'jpeg': 'o', 'turbo': 's', 'ddcm': '^'}
-    labels = {'jpeg': 'JPEG', 'turbo': 'Turbo-DDCM', 'ddcm': 'DDCM'}
+    colors = {'jpeg': 'blue', 'turbo': 'red', 'turbo_improved': 'orange', 'ddcm': 'green'}
+    markers = {'jpeg': 'o', 'turbo': 's', 'turbo_improved': 'D', 'ddcm': '^'}
+    labels = {'jpeg': 'JPEG', 'turbo': 'Turbo-DDCM', 'turbo_improved': 'Robust Turbo-DDCM', 'ddcm': 'DDCM'}
     
     for idx, image_name in enumerate(all_images):
         row = idx // 4
@@ -146,6 +147,7 @@ def plot_per_image_results(jpeg_data, turbo_data, ddcm_data, models, output_dir,
         
         jpeg_image_data = [d for d in jpeg_data if d['image'] == image_name] if 'jpeg' in models else []
         turbo_image_data = [d for d in turbo_data if d['image'] == image_name] if 'turbo' in models else []
+        turbo_improved_image_data = [d for d in turbo_improved_data if d['image'] == image_name] if 'turbo_improved' in models else []
         ddcm_image_data = [d for d in ddcm_data if d['image'] == image_name] if 'ddcm' in models else []
         
         ax.set_xscale('log')
@@ -196,6 +198,29 @@ def plot_per_image_results(jpeg_data, turbo_data, ddcm_data, models, output_dir,
                 ax.axhline(y=turbo_baseline_value, color=colors['turbo'], linestyle='--', 
                           linewidth=1.5, alpha=0.7, label=f'{labels["turbo"]} (baseline)', zorder=5)
         
+        if 'turbo_improved' in models and turbo_improved_image_data:
+            turbo_improved_bers = sorted(set([d['ber'] for d in turbo_improved_image_data if d['ber'] > 0]))
+            turbo_improved_baseline_data = [d[metric_key] for d in turbo_improved_image_data if d['ber'] == 0]
+            turbo_improved_baseline_value = np.mean(turbo_improved_baseline_data) if turbo_improved_baseline_data else None
+            
+            turbo_improved_bers_plot = []
+            turbo_improved_means = []
+            turbo_improved_stds = []
+            for ber in turbo_improved_bers:
+                values = [d[metric_key] for d in turbo_improved_image_data if d['ber'] == ber]
+                if values:
+                    turbo_improved_bers_plot.append(ber)
+                    turbo_improved_means.append(np.mean(values))
+                    turbo_improved_stds.append(np.std(values))
+            
+            if turbo_improved_bers_plot:
+                ax.plot(turbo_improved_bers_plot, turbo_improved_means, f'{markers["turbo_improved"]}-', 
+                       label=labels['turbo_improved'], color=colors['turbo_improved'],
+                       markersize=4, linewidth=1.5, zorder=2)
+            if turbo_improved_baseline_value is not None:
+                ax.axhline(y=turbo_improved_baseline_value, color=colors['turbo_improved'], linestyle='--', 
+                          linewidth=1.5, alpha=0.7, label=f'{labels["turbo_improved"]} (baseline)', zorder=5)
+        
         if 'ddcm' in models and ddcm_image_data:
             ddcm_bers = sorted(set([d['ber'] for d in ddcm_image_data if d['ber'] > 0]))
             ddcm_baseline_data = [d[metric_key] for d in ddcm_image_data if d['ber'] == 0]
@@ -232,7 +257,7 @@ def plot_per_image_results(jpeg_data, turbo_data, ddcm_data, models, output_dir,
     print(f"Saved: {output_path}")
 
 
-def plot_averaged_results(jpeg_data, turbo_data, ddcm_data, models, output_dir, metric='PSNR'):
+def plot_averaged_results(jpeg_data, turbo_data, turbo_improved_data, ddcm_data, models, output_dir, metric='PSNR'):
     """Create averaged plot showing mean metric vs BER across all images and trials.
     
     Grouping: Group all measurements by BER value (across all images and trials), 
@@ -244,12 +269,13 @@ def plot_averaged_results(jpeg_data, turbo_data, ddcm_data, models, output_dir, 
     
     all_bers = sorted(set([d['ber'] for d in jpeg_data if d['ber'] > 0] + 
                           [d['ber'] for d in turbo_data if d['ber'] > 0] +
+                          [d['ber'] for d in turbo_improved_data if d['ber'] > 0] +
                           [d['ber'] for d in ddcm_data if d['ber'] > 0]))
     
     metric_key = metric.lower()
-    colors = {'jpeg': 'blue', 'turbo': 'red', 'ddcm': 'green'}
-    markers = {'jpeg': 'o', 'turbo': 's', 'ddcm': '^'}
-    labels = {'jpeg': 'JPEG', 'turbo': 'Turbo-DDCM', 'ddcm': 'DDCM'}
+    colors = {'jpeg': 'blue', 'turbo': 'red', 'turbo_improved': 'orange', 'ddcm': 'green'}
+    markers = {'jpeg': 'o', 'turbo': 's', 'turbo_improved': 'D', 'ddcm': '^'}
+    labels = {'jpeg': 'JPEG', 'turbo': 'Turbo-DDCM', 'turbo_improved': 'Robust Turbo-DDCM', 'ddcm': 'DDCM'}
     
     jpeg_means = []
     jpeg_stds = []
@@ -264,6 +290,13 @@ def plot_averaged_results(jpeg_data, turbo_data, ddcm_data, models, output_dir, 
     turbo_counts = []
     turbo_baseline_mean = None
     turbo_baseline_std = None
+    
+    turbo_improved_means = []
+    turbo_improved_stds = []
+    turbo_improved_bers_plot = []
+    turbo_improved_counts = []
+    turbo_improved_baseline_mean = None
+    turbo_improved_baseline_std = None
     
     ddcm_means = []
     ddcm_stds = []
@@ -289,6 +322,14 @@ def plot_averaged_results(jpeg_data, turbo_data, ddcm_data, models, output_dir, 
                 turbo_stds.append(np.std(turbo_values))
                 turbo_counts.append(len(turbo_values))
         
+        if 'turbo_improved' in models:
+            turbo_improved_values = [d[metric_key] for d in turbo_improved_data if d['ber'] == ber]
+            if turbo_improved_values:
+                turbo_improved_bers_plot.append(ber)
+                turbo_improved_means.append(np.mean(turbo_improved_values))
+                turbo_improved_stds.append(np.std(turbo_improved_values))
+                turbo_improved_counts.append(len(turbo_improved_values))
+        
         if 'ddcm' in models:
             ddcm_values = [d[metric_key] for d in ddcm_data if d['ber'] == ber]
             if ddcm_values:
@@ -308,6 +349,12 @@ def plot_averaged_results(jpeg_data, turbo_data, ddcm_data, models, output_dir, 
         if turbo_baseline_values:
             turbo_baseline_mean = np.mean(turbo_baseline_values)
             turbo_baseline_std = np.std(turbo_baseline_values)
+    
+    if 'turbo_improved' in models:
+        turbo_improved_baseline_values = [d[metric_key] for d in turbo_improved_data if d['ber'] == 0]
+        if turbo_improved_baseline_values:
+            turbo_improved_baseline_mean = np.mean(turbo_improved_baseline_values)
+            turbo_improved_baseline_std = np.std(turbo_improved_baseline_values)
     
     if 'ddcm' in models:
         ddcm_baseline_values = [d[metric_key] for d in ddcm_data if d['ber'] == 0]
@@ -337,6 +384,16 @@ def plot_averaged_results(jpeg_data, turbo_data, ddcm_data, models, output_dir, 
                       linewidth=2, alpha=0.8, label=f'{labels["turbo"]} (baseline)', zorder=5)
             print(f"    Baseline (BER=0): {turbo_baseline_mean:.2f} ± {turbo_baseline_std:.2f}")
     
+    if 'turbo_improved' in models and turbo_improved_bers_plot:
+        ax.plot(turbo_improved_bers_plot, turbo_improved_means, f'{markers["turbo_improved"]}-', 
+               label=labels['turbo_improved'], color=colors['turbo_improved'],
+               markersize=6, linewidth=2, zorder=2)
+        print(f"  Robust Turbo-DDCM: {len(turbo_improved_bers_plot)} BER points, sample counts: {turbo_improved_counts}")
+        if turbo_improved_baseline_mean is not None:
+            ax.axhline(y=float(turbo_improved_baseline_mean), color=colors['turbo_improved'], linestyle='--', 
+                      linewidth=2, alpha=0.8, label=f'{labels["turbo_improved"]} (baseline)', zorder=5)
+            print(f"    Baseline (BER=0): {turbo_improved_baseline_mean:.2f} ± {turbo_improved_baseline_std:.2f}")
+    
     if 'ddcm' in models and ddcm_bers_plot:
         ax.plot(ddcm_bers_plot, ddcm_means, f'{markers["ddcm"]}-', 
                label=labels['ddcm'], color=colors['ddcm'],
@@ -360,20 +417,22 @@ def plot_averaged_results(jpeg_data, turbo_data, ddcm_data, models, output_dir, 
     print(f"Saved: {output_path}")
 
 
-def plot_error_counts(jpeg_csv, turbo_csv, ddcm_csv, models, output_dir, ber_min=None, ber_max=None):
+def plot_error_counts(jpeg_csv, turbo_csv, turbo_improved_csv, ddcm_csv, models, output_dir, ber_min=None, ber_max=None):
     """Plot decoding failure counts per BER for selected methods."""
     fig, ax = plt.subplots(figsize=(10, 6))
     
-    colors = {'jpeg': 'blue', 'turbo': 'red', 'ddcm': 'green'}
-    markers = {'jpeg': 'o', 'turbo': 's', 'ddcm': '^'}
-    labels = {'jpeg': 'JPEG', 'turbo': 'Turbo-DDCM', 'ddcm': 'DDCM'}
+    colors = {'jpeg': 'blue', 'turbo': 'red', 'turbo_improved': 'orange', 'ddcm': 'green'}
+    markers = {'jpeg': 'o', 'turbo': 's', 'turbo_improved': 'D', 'ddcm': '^'}
+    labels = {'jpeg': 'JPEG', 'turbo': 'Turbo-DDCM', 'turbo_improved': 'Robust Turbo-DDCM', 'ddcm': 'DDCM'}
     
     jpeg_all_data = load_all_csv_data(jpeg_csv, ber_min, ber_max) if 'jpeg' in models and jpeg_csv else []
     turbo_all_data = load_all_csv_data(turbo_csv, ber_min, ber_max) if 'turbo' in models and turbo_csv else []
+    turbo_improved_all_data = load_all_csv_data(turbo_improved_csv, ber_min, ber_max) if 'turbo_improved' in models and turbo_improved_csv else []
     ddcm_all_data = load_all_csv_data(ddcm_csv, ber_min, ber_max) if 'ddcm' in models and ddcm_csv else []
     
     all_bers = sorted(set([d['ber'] for d in jpeg_all_data if d['ber'] > 0] + 
                           [d['ber'] for d in turbo_all_data if d['ber'] > 0] +
+                          [d['ber'] for d in turbo_improved_all_data if d['ber'] > 0] +
                           [d['ber'] for d in ddcm_all_data if d['ber'] > 0]))
     
     if 'jpeg' in models and jpeg_all_data:
@@ -417,6 +476,27 @@ def plot_error_counts(jpeg_csv, turbo_csv, ddcm_csv, models, output_dir, ber_min
                    markersize=6, linewidth=2, alpha=0.8)
             print(f"  Turbo-DDCM error counts: {dict(zip(turbo_bers_plot, turbo_error_counts))}")
             print(f"  Turbo-DDCM total counts: {dict(zip(turbo_bers_plot, turbo_total_counts))}")
+    
+    if 'turbo_improved' in models and turbo_improved_all_data:
+        turbo_improved_error_counts = []
+        turbo_improved_total_counts = []
+        turbo_improved_bers_plot = []
+        
+        for ber in all_bers:
+            turbo_improved_rows = [d for d in turbo_improved_all_data if d['ber'] == ber]
+            if turbo_improved_rows:
+                turbo_improved_failures = sum(1 for d in turbo_improved_rows if d['psnr'] == 'N/A' or d['niqe'] == 'N/A')
+                turbo_improved_total = len(turbo_improved_rows)
+                turbo_improved_bers_plot.append(ber)
+                turbo_improved_error_counts.append(turbo_improved_failures)
+                turbo_improved_total_counts.append(turbo_improved_total)
+        
+        if turbo_improved_bers_plot:
+            ax.plot(turbo_improved_bers_plot, turbo_improved_error_counts, f'{markers["turbo_improved"]}-', 
+                   label=f'{labels["turbo_improved"]} failures', color=colors['turbo_improved'],
+                   markersize=6, linewidth=2, alpha=0.8)
+            print(f"  Robust Turbo-DDCM error counts: {dict(zip(turbo_improved_bers_plot, turbo_improved_error_counts))}")
+            print(f"  Robust Turbo-DDCM total counts: {dict(zip(turbo_improved_bers_plot, turbo_improved_total_counts))}")
     
     if 'ddcm' in models and ddcm_all_data:
         ddcm_error_counts = []
@@ -482,13 +562,15 @@ def main():
     parser.add_argument('--jpeg_csv', type=str, default=None,
                        help='Path to JPEG results CSV file')
     parser.add_argument('--turbo_csv', type=str, default=None,
-                       help='Path to Turbo-DDCM results CSV file')
+                       help='Path to Turbo-DDCM (improved protocol) results CSV file')
+    parser.add_argument('--turbo_improved_csv', type=str, default=None,
+                       help='Path to Robust Turbo-DDCM (old protocol) results CSV file')
     parser.add_argument('--ddcm_csv', type=str, nargs='+', default=None,
                        help='Path(s) to DDCM results CSV file(s). Can provide multiple files to concatenate (e.g., first_half and second_half)')
     parser.add_argument('--output_dir', type=str, required=True,
                        help='Output directory for plots')
     parser.add_argument('--models', type=str, nargs='+', default=['jpeg', 'turbo', 'ddcm'],
-                       choices=['jpeg', 'turbo', 'ddcm'],
+                       choices=['jpeg', 'turbo', 'turbo_improved', 'ddcm'],
                        help='Which models to include in plots (default: all)')
     parser.add_argument('--ber_min', type=float, default=None,
                        help='Minimum BER to include in plots (e.g., 1e-6). If None, include all BERs')
@@ -497,8 +579,8 @@ def main():
     
     args = parser.parse_args()
     
-    if not args.jpeg_csv and not args.turbo_csv and not args.ddcm_csv:
-        parser.error("At least one of --jpeg_csv, --turbo_csv, or --ddcm_csv must be provided")
+    if not args.jpeg_csv and not args.turbo_csv and not args.turbo_improved_csv and not args.ddcm_csv:
+        parser.error("At least one of --jpeg_csv, --turbo_csv, --turbo_improved_csv, or --ddcm_csv must be provided")
     
     models = [m.lower() for m in args.models]
     
@@ -529,13 +611,24 @@ def main():
     turbo_psnr_data = []
     turbo_niqe_data = []
     if 'turbo' in models and args.turbo_csv:
-        print(f"Loading Turbo-DDCM PSNR data from: {args.turbo_csv}")
+        print(f"Loading Turbo-DDCM (old) PSNR data from: {args.turbo_csv}")
         turbo_psnr_data = load_csv_data_psnr(args.turbo_csv, args.ber_min, args.ber_max)
         print(f"  Loaded {len(turbo_psnr_data)} rows with valid PSNR")
         
-        print(f"Loading Turbo-DDCM NIQE data from: {args.turbo_csv}")
+        print(f"Loading Turbo-DDCM (old) NIQE data from: {args.turbo_csv}")
         turbo_niqe_data = load_csv_data_niqe(args.turbo_csv, args.ber_min, args.ber_max)
         print(f"  Loaded {len(turbo_niqe_data)} rows with valid NIQE")
+    
+    turbo_improved_psnr_data = []
+    turbo_improved_niqe_data = []
+    if 'turbo_improved' in models and args.turbo_improved_csv:
+        print(f"Loading Robust Turbo-DDCM PSNR data from: {args.turbo_improved_csv}")
+        turbo_improved_psnr_data = load_csv_data_psnr(args.turbo_improved_csv, args.ber_min, args.ber_max)
+        print(f"  Loaded {len(turbo_improved_psnr_data)} rows with valid PSNR")
+        
+        print(f"Loading Robust Turbo-DDCM NIQE data from: {args.turbo_improved_csv}")
+        turbo_improved_niqe_data = load_csv_data_niqe(args.turbo_improved_csv, args.ber_min, args.ber_max)
+        print(f"  Loaded {len(turbo_improved_niqe_data)} rows with valid NIQE")
     
     ddcm_psnr_data = []
     ddcm_niqe_data = []
@@ -550,18 +643,18 @@ def main():
     
     print("\nCreating PSNR plots...")
     print("  Per-image: Grouping by (image, BER), averaging across trials")
-    plot_per_image_results(jpeg_psnr_data, turbo_psnr_data, ddcm_psnr_data, models, args.output_dir, metric='PSNR')
+    plot_per_image_results(jpeg_psnr_data, turbo_psnr_data, turbo_improved_psnr_data, ddcm_psnr_data, models, args.output_dir, metric='PSNR')
     print("  Averaged: Grouping by BER only, averaging across all images and trials")
-    plot_averaged_results(jpeg_psnr_data, turbo_psnr_data, ddcm_psnr_data, models, args.output_dir, metric='PSNR')
+    plot_averaged_results(jpeg_psnr_data, turbo_psnr_data, turbo_improved_psnr_data, ddcm_psnr_data, models, args.output_dir, metric='PSNR')
     
     print("\nCreating NIQE plots...")
     print("  Per-image: Grouping by (image, BER), averaging across trials")
-    plot_per_image_results(jpeg_niqe_data, turbo_niqe_data, ddcm_niqe_data, models, args.output_dir, metric='NIQE')
+    plot_per_image_results(jpeg_niqe_data, turbo_niqe_data, turbo_improved_niqe_data, ddcm_niqe_data, models, args.output_dir, metric='NIQE')
     print("  Averaged: Grouping by BER only, averaging across all images and trials")
-    plot_averaged_results(jpeg_niqe_data, turbo_niqe_data, ddcm_niqe_data, models, args.output_dir, metric='NIQE')
+    plot_averaged_results(jpeg_niqe_data, turbo_niqe_data, turbo_improved_niqe_data, ddcm_niqe_data, models, args.output_dir, metric='NIQE')
     
     print("\nCreating error count plot...")
-    plot_error_counts(args.jpeg_csv, args.turbo_csv, ddcm_csv_combined, models, args.output_dir, args.ber_min, args.ber_max)
+    plot_error_counts(args.jpeg_csv, args.turbo_csv, args.turbo_improved_csv, ddcm_csv_combined, models, args.output_dir, args.ber_min, args.ber_max)
     
     if ddcm_csv_combined and ddcm_csv_combined.startswith(args.output_dir):
         os.remove(ddcm_csv_combined)

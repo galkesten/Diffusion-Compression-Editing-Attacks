@@ -101,6 +101,12 @@ def find_turbo_ddcm_M_for_bpp_old_protocol(target_bpp, T, K, C):
     return best_M
 
 def find_turbo_ddcm_M_for_bpp_old_protocol_improved_psnr(target_bpp, T, K, C):
+    print("Finding Turbo-DDCM M for BPP using old protocol and improved PSNR")
+    print(f"Target BPP: {target_bpp}")
+    print(f"T: {T}")
+    print(f"K: {K}")
+    print(f"C: {C}")
+    print(f"--------------------------------")
     img_height, img_width = 512, 512
     
     low, high = 1, min(K, 10000)
