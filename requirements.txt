@@ -16,6 +16,8 @@ peft
 scikit-learn
 umap-learn
 scipy
+torchmetrics>=1.0.0
+neuralcompression
 # Fixed dependency conflicts
 packaging>=25.0
 importlib-metadata>=8.5.0

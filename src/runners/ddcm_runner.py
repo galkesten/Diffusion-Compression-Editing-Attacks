@@ -6,6 +6,7 @@ to project_root and run with cwd=project_root.
 """
 import glob
 import os
+import shutil
 import sys
 from typing import Any, Dict, Optional
 
@@ -26,7 +27,39 @@ class DdcmModelRunner(BaseModelRunner):
     def __init__(self, project_root: str, model_params: Optional[Dict[str, Any]] = None):
         self.project_root = os.path.abspath(project_root)
         self.ddcm_root = os.path.join(self.project_root, "ddcm-compressed-image-generation-main")
-        self.model_params = {**DEFAULT_DDCM_PARAMS, **(model_params or {})}
+        self.model_params = dict(model_params) if model_params else dict(DEFAULT_DDCM_PARAMS)
+
+    def _out_prefix(self) -> str:
+        T = int(self.model_params["T"])
+        K = int(self.model_params["K"])
+        M = int(self.model_params["M"])
+        C = int(self.model_params["C"])
+        model_id = str(self.model_params["model_id"])
+        t0, t1 = T - 1, 0
+        model_name = model_id.split("/")[-1] if "/" in model_id else model_id
+        return f"T={T}_in{t0}-{t1}_K={K}_M={M}_C={C}_model={model_name}"
+
+    def get_params_info(self) -> Dict[str, Any]:
+        return {"out_prefix": self._out_prefix()}
+
+    def path_for_compressed(self, compressed_dir: str, base: str) -> Optional[str]:
+        p = os.path.join(compressed_dir, self._out_prefix(), f"{base}_noise_indices.bin")
+        return p if os.path.isfile(p) else None
+
+    def prepare_temp_for_noisy_channel(self, compressed_path: str, temp_dir: str, base: str) -> str:
+        out_prefix = self._out_prefix()
+        subdir = os.path.join(temp_dir, out_prefix)
+        os.makedirs(subdir, exist_ok=True)
+        dest = os.path.join(subdir, f"{base}_noise_indices.bin")
+        shutil.copy(compressed_path, dest)
+        return dest
+
+    def find_decompressed_png(self, temp_dir: str, base: str) -> Optional[str]:
+        candidates = glob.glob(os.path.join(temp_dir, "**", "*_decomp.png"), recursive=True)
+        for c in candidates:
+            if os.path.splitext(os.path.basename(c))[0].replace("_decomp", "") == base:
+                return c
+        return None
 
     def _get_api(self):
         if self.ddcm_root not in sys.path:
@@ -80,7 +113,7 @@ class DdcmModelRunner(BaseModelRunner):
             )
             T, K, M, C = int(resolved["T"]), int(resolved["K"]), int(resolved["M"]), int(resolved["C"])
             model_name = str(resolved["model_id"]).split("/")[1] if "/" in str(resolved["model_id"]) else str(resolved["model_id"])
-            out_prefix = f"T={T}_in{T-1}-0_K={K}_M={M}_C={C}_model={model_name}"
+            out_prefix = self._out_prefix()
             for image_file in image_files:
                 base = os.path.splitext(image_file)[0]
                 bin_file = os.path.join(output_abs, out_prefix, f"{base}_noise_indices.bin")

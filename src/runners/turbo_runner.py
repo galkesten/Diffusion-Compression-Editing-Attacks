@@ -1,4 +1,5 @@
 import os
+import shutil
 import sys
 from typing import Any, Dict, Optional
 
@@ -55,6 +56,23 @@ class TurboModelRunner(BaseModelRunner):
 
     def get_model_params(self) -> Dict[str, object]:
         return dict(self.model_params)
+
+    def path_for_compressed(self, compressed_dir: str, base: str) -> Optional[str]:
+        p = os.path.join(compressed_dir, f"{base}{turbo_utils.BIN_SUFFIX}")
+        return p if os.path.isfile(p) else None
+
+    def prepare_temp_for_noisy_channel(self, compressed_path: str, temp_dir: str, base: str) -> str:
+        os.makedirs(temp_dir, exist_ok=True)
+        dest = os.path.join(temp_dir, f"{base}{turbo_utils.BIN_SUFFIX}")
+        shutil.copy(compressed_path, dest)
+        config_src = os.path.join(os.path.dirname(compressed_path), "compression_config.json")
+        if os.path.isfile(config_src):
+            shutil.copy(config_src, os.path.join(temp_dir, "compression_config.json"))
+        return dest
+
+    def find_decompressed_png(self, temp_dir: str, base: str) -> Optional[str]:
+        p = os.path.join(temp_dir, f"{base}.png")
+        return p if os.path.isfile(p) else None
 
     def _resolve_params(self, runtime_params: Dict[str, Any]) -> Dict[str, Any]:
         params = {**self.model_params, **runtime_params}

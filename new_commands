@@ -6,3 +6,15 @@ python src/find_compression_params.py --algorithms robust_turbo_ddcm  --bpp 0.1 
 
 ./py-sbatch.sh src/find_compression_params.py --algorithms turbo_ddcm --bpp 0.1 --dataset dataset_Kodack24 --subset 0-4
 ./py-sbatch.sh src/find_compression_params.py --algorithms ddcm --bpp 0.1 --dataset dataset_Kodack24 --subset 0-4
+
+# noisy_channel_runner.py (noisy channel + FID, PSNR, NIQE, LPIPS)
+# --algorithm: jpeg | ddcm | turbo_ddcm | robust_turbo_ddcm
+# --dataset: path to image dir (default: project/dataset)
+# --bpp, --resolution, --ber (comma-separated), --num_trials, --sample_images (e.g. 0-5), --output_dir, --compressed_dir (optional, skip baseline), --jpeg_quality_csv (for jpeg), --seed
+
+python src/noisy_channel_runner.py --algorithm turbo_ddcm --dataset dataset_Kodack24 --bpp 0.1 --resolution 512 --ber 1e-6,1e-5,1e-4,1e-3,1e-2,1e-1 --num_trials 3 --sample_images 0-5 --output_dir results/noisy_channel/turbo_ddcm
+
+./py-sbatch.sh src/noisy_channel_runner.py --algorithm turbo_ddcm --dataset dataset_Kodack24 --bpp 0.1 --resolution 512 --ber 1e-6,1e-5,1e-4,1e-3,1e-2,1e-1 --num_trials 3 --sample_images 0-5 --output_dir results/noisy_channel/turbo_ddcm
+
+# with precomputed compressed dir (skip baseline)
+python src/noisy_channel_runner.py --algorithm ddcm --dataset dataset_Kodack24 --bpp 0.1 --resolution 512 --compressed_dir results/noisy_channel/ddcm/compressed/dataset_Kodack24_ddcm_bpp0.1 --output_dir results/noisy_channel/ddcm

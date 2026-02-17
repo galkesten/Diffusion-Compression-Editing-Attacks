@@ -4,6 +4,8 @@ import os
 import shutil
 import subprocess
 
+import numpy as np
+
 
 def append_csv_row(csv_path, row):
     with open(csv_path, "a", newline="") as f:
@@ -140,6 +142,23 @@ def prepare_input_dir(dataset_path, image_files, input_dir, subset=None):
 
 def avg_or_zero(values):
     return sum(values) / len(values) if values else 0
+
+
+def flip_bits(binary_path: str, ber: float, output_path: str) -> int:
+    """Apply BER bit-flip noise to a binary file. Returns number of bits flipped."""
+    with open(binary_path, "rb") as f:
+        data = np.frombuffer(f.read(), dtype=np.uint8)
+    num_bits = len(data) * 8
+    rnd = np.random.random(num_bits)
+    should_flip = (rnd < ber).reshape(len(data), 8)
+    powers = np.array([1, 2, 4, 8, 16, 32, 64, 128], dtype=np.uint8)
+    mask = (should_flip.astype(np.uint8) @ powers).astype(np.uint8)
+    flipped = data ^ mask
+    n_flips = int(np.sum(np.unpackbits(mask)))
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+    with open(output_path, "wb") as f:
+        f.write(flipped.tobytes())
+    return n_flips
 
 
 def run_cmd(cmd, cwd):

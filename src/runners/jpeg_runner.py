@@ -1,9 +1,20 @@
 import os
-from typing import Any, Dict
+import shutil
+from typing import Any, Dict, Optional
 
+import pandas as pd
 from PIL import Image
 
 from .base import BaseModelRunner, list_png_sorted, list_files_sorted
+
+
+def _load_jpeg_quality_csv(csv_path: str) -> Dict[str, int]:
+    """Load quality per image from CSV with columns image_file and quality."""
+    df = pd.read_csv(csv_path)
+    if "quality" not in df.columns:
+        raise ValueError(f"JPEG quality CSV must have a 'quality' column: {csv_path}")
+    image_col = "image_file" if "image_file" in df.columns else df.columns[0]
+    return dict(zip(df[image_col].astype(str), df["quality"].astype(int)))
 
 
 class JpegModelRunner(BaseModelRunner):
@@ -11,6 +22,25 @@ class JpegModelRunner(BaseModelRunner):
 
     def get_model_params(self) -> Dict[str, object]:
         return {}
+
+    def path_for_compressed(self, compressed_dir: str, base: str) -> Optional[str]:
+        p = os.path.join(compressed_dir, f"{base}_compressed.jpg")
+        return p if os.path.isfile(p) else None
+
+    def prepare_temp_for_noisy_channel(self, compressed_path: str, temp_dir: str, base: str) -> str:
+        os.makedirs(temp_dir, exist_ok=True)
+        dest = os.path.join(temp_dir, f"{base}_compressed.jpg")
+        shutil.copy(compressed_path, dest)
+        return dest
+
+    def find_decompressed_png(self, temp_dir: str, base: str) -> Optional[str]:
+        p = os.path.join(temp_dir, f"{base}_decompressed.png")
+        return p if os.path.isfile(p) else None
+
+    def get_baseline_params(self, jpeg_quality_csv: Optional[str] = None) -> Dict[str, Any]:
+        if not jpeg_quality_csv or not os.path.isfile(jpeg_quality_csv):
+            raise ValueError("JPEG requires jpeg_quality_csv (CSV with columns image_file, quality)")
+        return {"quality_by_image": _load_jpeg_quality_csv(jpeg_quality_csv)}
 
     def run_compression(
         self,

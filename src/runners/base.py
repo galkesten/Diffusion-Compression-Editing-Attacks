@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 import os
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 __all__ = [
     "BaseModelRunner",
@@ -39,6 +39,31 @@ class BaseModelRunner(ABC):
     ) -> Dict[str, str]:
         """Decompress in place: read compressed data from compressed_dir and write decompressed output to the same dir. Return errors dict: image_file -> error message."""
         raise NotImplementedError
+
+    # Noisy-channel experiment: path/layout logic lives in the runner (no algorithm switch in caller).
+
+    def get_params_info(self) -> Dict[str, Any]:
+        """Extra info for path/layout (e.g. DDCM out_prefix). Default: empty."""
+        return {}
+
+    @abstractmethod
+    def path_for_compressed(self, compressed_dir: str, base: str) -> Optional[str]:
+        """Path to the compressed file for image base name. None if not applicable."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def prepare_temp_for_noisy_channel(self, compressed_path: str, temp_dir: str, base: str) -> str:
+        """Copy compressed file(s) into temp_dir in the layout expected by run_decompression. Returns path to the file to apply bit flips (same layout)."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def find_decompressed_png(self, temp_dir: str, base: str) -> Optional[str]:
+        """Path to the decompressed PNG in temp_dir after run_decompression. None if not found."""
+        raise NotImplementedError
+
+    def get_baseline_params(self, jpeg_quality_csv: Optional[str] = None) -> Dict[str, Any]:
+        """Params for baseline compression. Default: get_model_params(). JPEG runner overrides and requires jpeg_quality_csv."""
+        return dict(self.get_model_params())
 
 
 def _stem_key(name: str):
