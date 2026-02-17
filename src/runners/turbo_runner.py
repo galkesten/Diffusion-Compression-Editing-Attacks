@@ -1,0 +1,144 @@
+import os
+import sys
+from typing import Any, Dict, Optional
+
+import turbo_ddcm.utils as turbo_utils
+from .base import BaseModelRunner, list_png_sorted
+
+# Default params when robust=False (non-robust / standard turbo)
+DEFAULT_TURBO_PARAMS: Dict[str, Any] = {
+    "T": 30,
+    "K": 16384,
+    "M": 114,
+    "C": 1,
+    "seed": 88888888,
+    "old_protocol": False,
+    "manual_list_ind": True,
+}
+
+# Default params when robust=True (robust / old protocol)
+DEFAULT_ROBUST_TURBO_PARAMS: Dict[str, Any] = {
+    "T": 30,
+    "K": 16384,
+    "M": 73,
+    "C": 1,
+    "seed": 88888888,
+    "old_protocol": True,
+    "manual_list_ind": True,
+}
+
+
+class TurboModelRunner(BaseModelRunner):
+    name = "turbo_ddcm"
+
+    def __init__(
+        self,
+        project_root: str,
+        *,
+        robust: bool = False,
+        model_params: Optional[Dict[str, Any]] = None,
+    ):
+        self.project_root = project_root
+        self.turbo_root = os.path.join(project_root, "Turbo-DDCM-master")
+        mp = model_params if model_params else None
+        if mp is not None and "old_protocol" in mp and bool(mp["old_protocol"]) != bool(robust):
+            raise ValueError(
+                "robust and model_params['old_protocol'] conflict: "
+                f"robust={robust!r} vs model_params['old_protocol']={mp['old_protocol']!r}"
+            )
+        if mp is not None:
+            self.model_params = dict(mp)
+        else:
+            default = DEFAULT_ROBUST_TURBO_PARAMS if robust else DEFAULT_TURBO_PARAMS
+            self.model_params = dict(default)
+        self.name = "robust_turbo_ddcm" if self.model_params.get("old_protocol", False) else "turbo_ddcm"
+
+    def get_model_params(self) -> Dict[str, object]:
+        return dict(self.model_params)
+
+    def _resolve_params(self, runtime_params: Dict[str, Any]) -> Dict[str, Any]:
+        params = {**self.model_params, **runtime_params}
+        required = ["T", "K", "M"]
+        missing = [k for k in required if k not in params]
+        if missing:
+            raise ValueError(f"Missing Turbo params: {missing}")
+        return params
+
+    def _get_api(self):
+        if self.turbo_root not in sys.path:
+            sys.path.insert(0, self.turbo_root)
+        from turbo_ddcm_api import compress_main_programmatic as turbo_compress_main_programmatic  # type: ignore
+        from turbo_ddcm_api import decompress_main_programmatic as turbo_decompress_main_programmatic  # type: ignore
+
+        return turbo_compress_main_programmatic, turbo_decompress_main_programmatic
+
+    def run_compression(
+        self,
+        input_dir: str,
+        output_dir: str,
+        *,
+        img_height: int,
+        img_width: int,
+        params: Dict[str, Any],
+    ) -> Dict[str, str]:
+        resolved_params = self._resolve_params(params)
+        os.makedirs(output_dir, exist_ok=True)
+        image_files = list_png_sorted(input_dir)
+        errors: Dict[str, str] = {}
+        try:
+            turbo_compress, _ = self._get_api()
+            turbo_compress(
+                input_dir=input_dir,
+                output_dir=output_dir,
+                M=int(resolved_params["M"]),
+                gpu=0,
+                float32=False,
+                seed=int(resolved_params.get("seed", 88888888)),
+                T=int(resolved_params["T"]),
+                K=int(resolved_params["K"]),
+                weights_dir=None,
+                save_reconstructions=False,
+                save_runtimes=False,
+                old_protocol=bool(resolved_params.get("old_protocol", False)),
+                manual_list_ind=bool(resolved_params.get("manual_list_ind", True)),
+            )
+            for image_file in image_files:
+                base = os.path.splitext(image_file)[0]
+                out = os.path.join(output_dir, f"{base}{turbo_utils.BIN_SUFFIX}")
+                if not os.path.exists(out):
+                    errors[image_file] = "missing Turbo binary output"
+                    continue
+        except Exception as exc:
+            for image_file in image_files:
+                errors[image_file] = str(exc)
+
+        return errors
+
+    def run_decompression(
+        self,
+        compressed_dir: str,
+        *,
+        img_height: int,
+        img_width: int,
+    ) -> Dict[str, str]:
+        os.makedirs(compressed_dir, exist_ok=True)
+        errors: Dict[str, str] = {}
+        # Compression writes {base}.turbo_ddcm and compression_config.json into compressed_dir; decompress in place
+        bin_suffix = turbo_utils.BIN_SUFFIX
+        bin_files = [f for f in os.listdir(compressed_dir) if f.endswith(bin_suffix)]
+        image_names = [os.path.splitext(f)[0] + ".png" for f in bin_files]
+
+        config_path = os.path.join(compressed_dir, "compression_config.json")
+        if not os.path.exists(config_path):
+            for image_file in image_names:
+                errors[image_file] = "compression_config.json not found in compressed directory"
+            return errors
+
+        try:
+            _, turbo_decompress = self._get_api()
+            turbo_decompress(input_dir=compressed_dir, output_dir=compressed_dir, gpu=0, save_runtimes=False)
+        except Exception as exc:
+            for image_file in image_names:
+                errors[image_file] = str(exc)
+
+        return errors

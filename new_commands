@@ -1,0 +1,8 @@
+#compression params 
+
+python src/find_compression_params.py --algorithms robust_turbo_ddcm  --bpp 0.1 --dataset dataset_Kodack24 --subset 0-4
+./py-sbatch.sh src/find_compression_params.py --algorithms robust_turbo_ddcm  --bpp 0.1 --dataset dataset_Kodack24 --subset 0-4
+
+
+./py-sbatch.sh src/find_compression_params.py --algorithms turbo_ddcm --bpp 0.1 --dataset dataset_Kodack24 --subset 0-4
+./py-sbatch.sh src/find_compression_params.py --algorithms ddcm --bpp 0.1 --dataset dataset_Kodack24 --subset 0-4

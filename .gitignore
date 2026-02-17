@@ -10,7 +10,7 @@ dist/
 build/
 
 # Results and outputs
-results/
+results2/
 ddcm_test_output/
 
 # Datasets

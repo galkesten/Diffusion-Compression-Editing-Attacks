@@ -1,616 +1,297 @@
-import os
-import sys
-import csv
-import subprocess
-import shutil
+"""
+Find compression parameters per algorithm. All algorithm-specific behavior is
+defined in ALGO_CONFIG; run_experiment is a single config-driven loop.
+"""
 import argparse
-from PIL import Image
+import csv
 import io
+import os
+import shutil
+import sys
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
+import numpy as np
+from PIL import Image
 import torch
 
-import turbo_ddcm.utils as utils
+import turbo_ddcm.utils as turbo_utils
+from experiment_utils import (
+    append_csv_row,
+    avg_or_zero,
+    binary_search_best_int,
+    collect_actual_bpp_by_glob,
+    collect_actual_bpp_from_output,
+    get_images,
+    parse_subset,
+    prepare_input_dir,
+    resolve_subset,
+)
+from runners import BaseModelRunner, DdcmModelRunner, JpegModelRunner, TurboModelRunner
+
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+if _script_dir not in sys.path:
+    sys.path.insert(0, _script_dir)
+
+
+AlgoConfigItem = Dict[str, Any]  # runner_factory, prepare_params, output_dir_name, path_for_compressed, csv_*, write_csv_rows
 
 
 def find_jpeg_quality_for_bpp(img, target_bpp, resize_to=(512, 512)):
     low, high = 1, 100
-    best_quality, best_bpp, best_diff = 1, 0, float('inf')
+    best_quality, best_bpp, best_diff = 1, 0, float("inf")
     for _ in range(20):
         mid = (low + high) // 2
         buffer = io.BytesIO()
-        img.save(buffer, format='JPEG', quality=mid)
-        file_size_bits = len(buffer.getvalue()) * 8
-        pixels = resize_to[0] * resize_to[1]
-        bpp = file_size_bits / pixels
+        img.save(buffer, format="JPEG", quality=mid)
+        bpp = (len(buffer.getvalue()) * 8) / (resize_to[0] * resize_to[1])
         diff = abs(bpp - target_bpp)
         if diff < best_diff:
-            best_diff = diff
-            best_quality = mid
-            best_bpp = bpp
+            best_quality, best_bpp, best_diff = mid, bpp, diff
         if bpp < target_bpp:
             low = mid + 1
         else:
             high = mid - 1
     return best_quality, best_bpp
 
-def find_turbo_ddcm_M_for_bpp(target_bpp, T, K, C):
-    img_height, img_width = 512, 512
-    
-    low, high = 1, min(K, 10000)
-    best_M, best_diff = 1, float('inf')
-    for _ in range(30):
-        mid = (low + high) // 2
-        try:
-            bpp = utils.turbo_ddcm_bpp(T, K, mid, C, 0, img_height, img_width)
-            diff = abs(bpp - target_bpp)
-            if diff < best_diff:
-                best_diff = diff
-                best_M = mid
-            if bpp < target_bpp:
-                low = mid + 1
-            else:
-                high = mid - 1
-        except:
-            high = mid - 1
-    return best_M
 
-def turbo_ddcm_bpp_old_protocol(T, K, M, C, NBS, img_height, img_width):
-    """Calculate BPP for Turbo-DDCM using old protocol encoding."""
-    import math
-    # Old protocol: M * (ceil(log2(K)) + C) bits per iteration
-    
-    
-    bits_per_iteration = M * (math.ceil(math.log2(K)) + C)
-    bits = (T - NBS - 1) * bits_per_iteration
-    bpp = bits / (img_height * img_width)
-    return round(bpp, 8)
-
-def turbo_ddcm_bpp_new_protocol_improved_psnr(T, K, M, C, img_height, img_width):
-
-    bpp = turbo_ddcm_bpp_old_protocol(T, K, M, C, 0, img_height, img_width)
-    bins = torch.logspace(
-    start=torch.log10(torch.tensor(0.01)), end=torch.log10(torch.tensor(0.15)), steps=70)
+def _turbo_bpp_with_manual_list_ind(T, K, M, C, img_height, img_width, bpp_fn):
+    bpp = bpp_fn(T, K, M, C, 0, img_height, img_width)
+    bins = torch.logspace(start=torch.log10(torch.tensor(0.01)), end=torch.log10(torch.tensor(0.15)), steps=70)
+    nbs = torch.max(torch.tensor(0), torch.min(torch.tensor(T - 2), 70 - torch.bucketize(torch.tensor(bpp), bins) - 1)).item()
+    return bpp_fn(T, K, M, C, nbs, img_height, img_width)
 
 
-    nbs = torch.max(torch.tensor(0),
-                torch.min(torch.tensor(T - 2),
-                            # NBS <= T - 2 (we have to do one step with bits and we have one DDIM step
-                            # either way at the end of the DDPM process).
-                            70 - torch.bucketize(bpp, bins) - 1)).item()
-    
-    return turbo_ddcm_bpp_old_protocol(T, K, M, C, nbs, img_height, img_width)
+def ddcm_bpp(T, K, M, C, img_height, img_width, optimized_Ts):
+    return (optimized_Ts - 1) * (M * np.log2(K) + (M - 1) * C) / (img_height * img_width)
 
-def find_turbo_ddcm_M_for_bpp_old_protocol(target_bpp, T, K, C):
-    img_height, img_width = 512, 512
-    
-    low, high = 1, min(K, 10000)
-    best_M, best_diff = 1, float('inf')
-    for _ in range(30):
-        mid = (low + high) // 2
-        try:
-            bpp = turbo_ddcm_bpp_old_protocol(T, K, mid, C, 0, img_height, img_width)
-            diff = abs(bpp - target_bpp)
-            if diff < best_diff:
-                best_diff = diff
-                best_M = mid
-            if bpp < target_bpp:
-                low = mid + 1
-            else:
-                high = mid - 1
-        except:
-            high = mid - 1
-    return best_M
 
-def find_turbo_ddcm_M_for_bpp_old_protocol_improved_psnr(target_bpp, T, K, C):
-    print("Finding Turbo-DDCM M for BPP using old protocol and improved PSNR")
-    print(f"Target BPP: {target_bpp}")
-    print(f"T: {T}")
-    print(f"K: {K}")
-    print(f"C: {C}")
-    print(f"--------------------------------")
-    img_height, img_width = 512, 512
-    
-    low, high = 1, min(K, 10000)
-    best_M, best_diff = 1, float('inf')
-    for _ in range(30):
-        mid = (low + high) // 2
-        try:
-            bpp = turbo_ddcm_bpp_new_protocol_improved_psnr(T, K, mid, C, img_height, img_width)
-            diff = abs(bpp - target_bpp)
-            if diff < best_diff:
-                best_diff = diff
-                best_M = mid
-            if bpp < target_bpp:
-                low = mid + 1
-            else:
-                high = mid - 1
-        except:
-            high = mid - 1
-    return best_M
+def find_turbo_ddcm_M_for_bpp(target_bpp, T, K, C, img_height, img_width):
+    return binary_search_best_int(target_bpp, 1, min(K, 10000), lambda m: _turbo_bpp_with_manual_list_ind(T, K, m, C, img_height, img_width, turbo_utils.turbo_ddcm_bpp))
 
-def ddcm_bpp(T, K, M, C, imsize, optimized_Ts):
-    import numpy as np
-    return (optimized_Ts - 1) * (M * np.log2(K) + (M - 1) * C) / (imsize ** 2)
 
-def find_ddcm_M_for_bpp(target_bpp, T, K, C, imsize=512, t_range=(999, 0)):
-    import numpy as np
-    optimized_Ts = T  # Approximation: t_range=(999,0) covers all timesteps
-    
-    low, high = 1, 100
-    best_M, best_diff = 1, float('inf')
-    for _ in range(30):
-        mid = (low + high) // 2
-        try:
-            bpp = ddcm_bpp(T, K, mid, C, imsize, optimized_Ts)
-            diff = abs(bpp - target_bpp)
-            if diff < best_diff:
-                best_diff = diff
-                best_M = mid
-            if bpp < target_bpp:
-                low = mid + 1
-            else:
-                high = mid - 1
-        except:
-            high = mid - 1
-    return best_M
+def find_robust_turbo_ddcm_M_for_bpp(target_bpp, T, K, C, img_height, img_width):
+    return binary_search_best_int(target_bpp, 1, min(K, 10000), lambda m: _turbo_bpp_with_manual_list_ind(T, K, m, C, img_height, img_width, turbo_utils.turbo_ddcm_bpp_old))
 
-def get_sample_images(dataset_path, num_samples=2):
-    image_files = sorted([f for f in os.listdir(dataset_path) if f.endswith('.png')], key=lambda x: int(x.split('.')[0]))
-    return image_files[:num_samples]
 
-def get_all_images(dataset_path):
-    image_files = sorted([f for f in os.listdir(dataset_path) if f.endswith('.png')], key=lambda x: int(x.split('.')[0]))
-    return image_files
+def find_ddcm_M_for_bpp(target_bpp, T, K, C, img_height, img_width):
+    return binary_search_best_int(target_bpp, 1, 100, lambda m: ddcm_bpp(T, K, m, C, img_height, img_width, T))
 
-def run_jpeg_experiment(dataset_path, all_images, target_bpps, project_root, csv_path):
-    resize_to = (512, 512)
-    img_height, img_width = resize_to
-    results_dir = os.path.join(project_root, 'results', 'compression_ratio_estimate', 'jpeg')
+
+# ---------------------------------------------------------------------------
+# Per-algorithm behavior (used inside ALGO_CONFIG)
+# ---------------------------------------------------------------------------
+def _prepare_params_jpeg(target_bpp: float, dataset_path: str, images_to_use: List[str], img_height: int, img_width: int, resize_to: Tuple[int, int], _params: Dict[str, Any]) -> Dict[str, Any]:
+    quality_by_image = {}
+    for img_file in images_to_use:
+        img = Image.open(os.path.join(dataset_path, img_file)).convert("RGB")
+        if img.size != resize_to:
+            img = img.resize(resize_to)
+        q, _ = find_jpeg_quality_for_bpp(img, target_bpp, resize_to)
+        quality_by_image[img_file] = q
+    return {"params": {"quality_by_image": quality_by_image}}
+
+
+def _prepare_params_ddcm(target_bpp: float, _dataset_path: str, _images_to_use: List[str], img_height: int, img_width: int, _resize_to: Tuple[int, int], params: Dict[str, Any]) -> Dict[str, Any]:
+    p = params
+    T, K, C = int(p["T"]), int(p["K"]), int(p["C"])
+    model_id = str(p["model_id"])
+    M = find_ddcm_M_for_bpp(target_bpp, T, K, C, img_height, img_width)
+    theoretical = ddcm_bpp(T, K, M, C, img_height, img_width, T)
+    t0, t1 = T - 1, 0
+    model_name = model_id.split("/")[1] if "/" in model_id else model_id
+    out_prefix = f"T={T}_in{t0}-{t1}_K={K}_M={M}_C={C}_model={model_name}"
+    return {"params": {"T": T, "K": K, "M": M, "C": C, "model_id": model_id}, "out_prefix": out_prefix, "theoretical": theoretical, "M": M, "T": T, "K": K, "C": C}
+
+
+def _prepare_params_turbo(target_bpp: float, _dataset_path: str, _images_to_use: List[str], img_height: int, img_width: int, _resize_to: Tuple[int, int], params: Dict[str, Any]) -> Dict[str, Any]:
+    p = params
+    T, K, C = int(p["T"]), int(p["K"]), int(p["C"])
+    find_m = find_robust_turbo_ddcm_M_for_bpp if p.get("old_protocol") else find_turbo_ddcm_M_for_bpp
+    bpp_fn = turbo_utils.turbo_ddcm_bpp_old if p.get("old_protocol") else turbo_utils.turbo_ddcm_bpp
+    M = find_m(target_bpp, T, K, C, img_height, img_width)
+    theoretical = _turbo_bpp_with_manual_list_ind(T, K, M, C, img_height, img_width, bpp_fn)
+    return {"params": {**p, "M": M}, "theoretical": theoretical, "M": M, "T": T, "K": K, "C": C}
+
+
+def _write_csv_jpeg(csv_path: str, target_bpp: float, params_info: Dict[str, Any], pairs: List[Tuple[str, float]], images_to_use: List[str], errors: Dict[str, str]) -> None:
+    quality_by_image = params_info["params"].get("quality_by_image", {})
+    pair_dict = dict(pairs)
+    for img_file in images_to_use:
+        q = quality_by_image.get(img_file, "")
+        actual = errors.get(img_file, "") if errors else pair_dict.get(img_file, 0.0)
+        append_csv_row(csv_path, [img_file, target_bpp, q, actual])
+
+
+def _write_csv_combined(csv_path: str, target_bpp: float, params_info: Dict[str, Any], pairs: List[Tuple[str, float]], _images_to_use: List[str], errors: Dict[str, str]) -> None:
+    avg_actual = avg_or_zero([bpp for _, bpp in pairs]) if not errors else 0.0
+    row = [target_bpp, params_info["M"], params_info["theoretical"], avg_actual, params_info["T"], params_info["K"], params_info["C"]]
+    append_csv_row(csv_path, row)
+
+
+def _make_config(
+    *,
+    params: Dict[str, Any],
+    runner_factory: Callable[..., BaseModelRunner],
+    prepare_params: Callable[..., Dict[str, Any]],
+    output_dir_name: Callable[[str, float, str], str],
+    path_for_compressed: Callable[[str, str, Dict[str, Any]], str],
+    csv_key: str,
+    csv_filename: str,
+    csv_headers: List[str],
+    write_csv_rows: Callable[..., None],
+    bpp_search_glob: Optional[str] = None,
+) -> AlgoConfigItem:
+    out = {
+        "params": params,
+        "runner_factory": runner_factory,
+        "prepare_params": prepare_params,
+        "output_dir_name": output_dir_name,
+        "path_for_compressed": path_for_compressed,
+        "csv_key": csv_key,
+        "csv_filename": csv_filename,
+        "csv_headers": csv_headers,
+        "write_csv_rows": write_csv_rows,
+    }
+    if bpp_search_glob is not None:
+        out["bpp_search_glob"] = bpp_search_glob
+    return out
+
+
+# Algorithm config: one place for all algo-specific behavior
+ALGO_CONFIG: Dict[str, AlgoConfigItem] = {
+    "jpeg": _make_config(
+        params={},
+        runner_factory=lambda _root: JpegModelRunner(),
+        prepare_params=_prepare_params_jpeg,
+        output_dir_name=lambda dataset_name, target_bpp, _algo: f"{dataset_name}_jpeg_bpp{target_bpp}",
+        path_for_compressed=lambda out_dir, base, _pi: os.path.join(out_dir, f"{base}_compressed.jpg"),
+        csv_key="jpeg",
+        csv_filename="jpeg_compression_params.csv",
+        csv_headers=["image_file", "target_bpp", "quality", "actual_bpp"],
+        write_csv_rows=_write_csv_jpeg,
+    ),
+    "ddcm": _make_config(
+        params={"T": 1000, "K": 8192, "C": 3, "t_range": (999, 0), "model_id": "Manojb/stable-diffusion-2-1-base"},
+        runner_factory=lambda root: DdcmModelRunner(root),
+        prepare_params=_prepare_params_ddcm,
+        output_dir_name=lambda dataset_name, target_bpp, _algo: f"{dataset_name}_ddcm_bpp{target_bpp}_compressed",
+        path_for_compressed=lambda out_dir, base, pi: os.path.join(out_dir, pi["out_prefix"], f"{base}_noise_indices.bin"),
+        csv_key="combined",
+        csv_filename="ddcm_bpp.csv",
+        csv_headers=["target_bpp", "M", "theoretical_bpp", "actual_bpp", "T", "K", "C"],
+        write_csv_rows=_write_csv_combined,
+    ),
+    "turbo_ddcm": _make_config(
+        params={"T": 30, "K": 16384, "C": 1, "seed": 88888888, "old_protocol": False, "manual_list_ind": True},
+        runner_factory=lambda root: TurboModelRunner(root, robust=False),
+        prepare_params=_prepare_params_turbo,
+        output_dir_name=lambda dataset_name, target_bpp, algo: f"{dataset_name}_{algo}_bpp{target_bpp}_compressed",
+        path_for_compressed=lambda out_dir, base, _pi: os.path.join(out_dir, f"{base}{turbo_utils.BIN_SUFFIX}"),
+        csv_key="combined",
+        csv_filename="turbo_ddcm_bpp.csv",
+        csv_headers=["target_bpp", "M", "theoretical_bpp", "actual_bpp", "T", "K", "C"],
+        write_csv_rows=_write_csv_combined,
+    ),
+    "robust_turbo_ddcm": _make_config(
+        params={"T": 30, "K": 16384, "C": 1, "seed": 88888888, "old_protocol": True, "manual_list_ind": True},
+        runner_factory=lambda root: TurboModelRunner(root, robust=True),
+        prepare_params=_prepare_params_turbo,
+        output_dir_name=lambda dataset_name, target_bpp, algo: f"{dataset_name}_{algo}_bpp{target_bpp}_compressed",
+        path_for_compressed=lambda out_dir, base, _pi: os.path.join(out_dir, f"{base}{turbo_utils.BIN_SUFFIX}"),
+        csv_key="combined",
+        csv_filename="robust_turbo_ddcm_bpp.csv",
+        csv_headers=["target_bpp", "M", "theoretical_bpp", "actual_bpp", "T", "K", "C"],
+        write_csv_rows=_write_csv_combined,
+    ),
+}
+ALL_ALGOS = list(ALGO_CONFIG.keys())
+
+
+def run_experiment(
+    algorithm: str,
+    dataset_path: str,
+    all_images: List[str],
+    target_bpps: List[float],
+    project_root: str,
+    csv_path: str,
+    img_height: int,
+    img_width: int,
+    subset: Any = None,
+) -> None:
+    cfg = ALGO_CONFIG[algorithm]
+    runner = cfg["runner_factory"](project_root)
+    prepare_params = cfg["prepare_params"]
+    output_dir_name = cfg["output_dir_name"]
+    path_for_compressed = cfg["path_for_compressed"]
+    write_csv_rows = cfg["write_csv_rows"]
+
+    images_to_use = resolve_subset(all_images, subset)
+    dataset_name = os.path.basename(os.path.normpath(dataset_path))
+    results_dir = os.path.join(project_root, "results", "compression_ratio_estimate", algorithm)
     os.makedirs(results_dir, exist_ok=True)
-    
+    resize_to = (img_width, img_height)
+
     for target_bpp in target_bpps:
-        output_dir = os.path.join(results_dir, f'dataset_Kodack24_jpeg_bpp{target_bpp}')
+        fixed_params = cfg.get("params") or {}
+        params_info = prepare_params(target_bpp, dataset_path, images_to_use, img_height, img_width, resize_to, fixed_params)
+        out_name = output_dir_name(dataset_name, target_bpp, algorithm)
+        output_dir = os.path.join(results_dir, out_name)
         os.makedirs(output_dir, exist_ok=True)
-        
-        for img_file in all_images:
-            img_path = os.path.join(dataset_path, img_file)
-            
-            img = Image.open(img_path).convert('RGB')
-            if resize_to and img.size != resize_to:
-                img = img.resize(resize_to)
-            
-            quality, _ = find_jpeg_quality_for_bpp(img, target_bpp, resize_to)
-            
-            base_name = os.path.splitext(img_file)[0]
-            jpeg_path = os.path.join(output_dir, f'{base_name}_quality{quality}.jpg')
-            img.save(jpeg_path, format='JPEG', quality=quality)
-            
-            actual_bpp = calculate_actual_bpp(jpeg_path, img_height, img_width)
-            append_to_jpeg_csv(csv_path, img_file, target_bpp, quality, actual_bpp)
-            
-            reconstructed_img = Image.open(jpeg_path).convert('RGB')
-            png_path = os.path.join(output_dir, f'{base_name}_quality{quality}.png')
-            reconstructed_img.save(png_path, format='PNG')
-            os.remove(jpeg_path)
-    
-    return {}, {}
+        staging_dir = os.path.join(output_dir, "temp_input")
+        if os.path.exists(staging_dir):
+            shutil.rmtree(staging_dir)
 
-def calculate_actual_bpp(binary_file_path, img_height=512, img_width=512):
-    file_size_bytes = os.path.getsize(binary_file_path)
-    file_size_bits = file_size_bytes * 8
-    pixels = img_height * img_width
-    return file_size_bits / pixels
+        prepare_input_dir(dataset_path, all_images, staging_dir, subset=subset)
+        errors = runner.run_compression(staging_dir, output_dir, img_height=img_height, img_width=img_width, params=params_info["params"])
+        decomp_errors = runner.run_decompression(output_dir, img_height=img_height, img_width=img_width)
+        errors = {**errors, **decomp_errors}
 
-def run_turbo_ddcm_experiment(dataset_path, sample_images, target_bpps, project_root, theoretical_csv_path, actual_csv_path):
-    T = 20
-    K = 16384
-    C = 1
-    seed = 88888888
-    turbo_ddcm_path = os.path.join(project_root, 'Turbo-DDCM-master')
-    img_height, img_width = 512, 512
-    
-    turbo_ddcm_Ms = {}
-    turbo_ddcm_actual_bpps = {}
-    
-    for target_bpp in target_bpps:
-        M = find_turbo_ddcm_M_for_bpp(target_bpp, T, K, C)
-        turbo_ddcm_Ms[target_bpp] = M
-        theoretical_bpp = utils.turbo_ddcm_bpp(T, K, M, C, 0, img_height, img_width)
-        append_to_turbo_ddcm_theoretical_csv(theoretical_csv_path, target_bpp, M, theoretical_bpp, T, K, C)
-    
-    results_dir = os.path.join(project_root, 'results', 'compression_ratio_estimate', 'turbo_ddcm')
+        if cfg.get("bpp_search_glob"):
+            pairs = collect_actual_bpp_by_glob(images_to_use, output_dir, img_height, img_width, cfg["bpp_search_glob"])
+        else:
+            path_fn = lambda out_dir, base, pi=params_info: path_for_compressed(out_dir, base, pi)
+            pairs = collect_actual_bpp_from_output(images_to_use, output_dir, img_height, img_width, path_fn)
+        write_csv_rows(csv_path, target_bpp, params_info, pairs, images_to_use, errors)
+
+        shutil.rmtree(staging_dir, ignore_errors=True)
+
+
+def init_csv_for_algorithm(project_root: str, algorithm: str) -> str:
+    cfg = ALGO_CONFIG[algorithm]
+    results_dir = os.path.join(project_root, "results", "compression_ratio_estimate", algorithm)
     os.makedirs(results_dir, exist_ok=True)
-    
-    for target_bpp in target_bpps:
-        compression_dir = os.path.join(results_dir, f'dataset_Kodack24_turbo_ddcm_bpp{target_bpp}_compressed')
-        decompression_dir = os.path.join(results_dir, f'dataset_Kodack24_turbo_ddcm_bpp{target_bpp}_decompressed')
-        os.makedirs(compression_dir, exist_ok=True)
-        os.makedirs(decompression_dir, exist_ok=True)
-        M = turbo_ddcm_Ms[target_bpp]
-        
-        temp_input_dir = os.path.join(compression_dir, 'temp_input')
-        os.makedirs(temp_input_dir, exist_ok=True)
-        for img_file in sample_images:
-            src_path = os.path.join(dataset_path, img_file)
-            dst_path = os.path.join(temp_input_dir, img_file)
-            shutil.copy(src_path, dst_path)
-        
-        roundtrip_script = os.path.join(turbo_ddcm_path, 'roundtrip.py')
-        cmd = [
-            sys.executable, roundtrip_script,
-            '--input_dir', os.path.abspath(temp_input_dir),
-            '--output_compression_dir', os.path.abspath(compression_dir),
-            '--output_decompression_dir', os.path.abspath(decompression_dir),
-            '--M', str(M),
-            '--T', str(T),
-            '--K', str(K),
-            '--seed', str(seed),
-            '--save_reconstructions'
-        ]
-        subprocess.run(cmd, check=True, cwd=turbo_ddcm_path)
-        
-        actual_bpps = []
-        for img_file in sample_images:
-            base_name = os.path.splitext(img_file)[0]
-            binary_path = os.path.join(compression_dir, f'{base_name}{utils.BIN_SUFFIX}')
-            if os.path.exists(binary_path):
-                actual_bpp = calculate_actual_bpp(binary_path, img_height, img_width)
-                actual_bpps.append(actual_bpp)
-                new_binary = os.path.join(compression_dir, f'{base_name}_M{M}{utils.BIN_SUFFIX}')
-                os.rename(binary_path, new_binary)
-        
-        avg_actual_bpp = sum(actual_bpps) / len(actual_bpps) if actual_bpps else 0
-        turbo_ddcm_actual_bpps[target_bpp] = avg_actual_bpp
-        append_to_turbo_ddcm_actual_csv(actual_csv_path, target_bpp, M, avg_actual_bpp, T, K, C)
-        
-        for img_file in sample_images:
-            base_name = os.path.splitext(img_file)[0]
-            recon_path = os.path.join(decompression_dir, img_file)
-            new_recon = os.path.join(decompression_dir, f'{base_name}_M{M}.png')
-            if os.path.exists(recon_path):
-                os.rename(recon_path, new_recon)
-        
-        shutil.rmtree(temp_input_dir)
-    
-    return turbo_ddcm_Ms, T, K, turbo_ddcm_actual_bpps
+    path = os.path.join(results_dir, cfg["csv_filename"])
+    with open(path, "w", newline="") as f:
+        csv.writer(f).writerow(cfg["csv_headers"])
+    return path
 
-def run_turbo_ddcm_old_protocol_experiment(dataset_path, sample_images, target_bpps, project_root, theoretical_csv_path, actual_csv_path, manual_list_ind=False):
-    T = 30 if manual_list_ind else 20
-    K = 16384
-    C = 1
-    seed = 88888888
-    turbo_ddcm_path = os.path.join(project_root, 'Turbo-DDCM-master')
-    img_height, img_width = 512, 512
-    
-    turbo_ddcm_Ms = {}
-    turbo_ddcm_actual_bpps = {}
-    
-    for target_bpp in target_bpps:
-        M = find_turbo_ddcm_M_for_bpp_old_protocol_improved_psnr(target_bpp, T, K, C) if manual_list_ind else find_turbo_ddcm_M_for_bpp_old_protocol(target_bpp, T, K, C)
-        turbo_ddcm_Ms[target_bpp] = M
-        theoretical_bpp = turbo_ddcm_bpp_new_protocol_improved_psnr(T, K, M, C, img_height, img_width) if manual_list_ind else turbo_ddcm_bpp_old_protocol(T, K, M, C, 0, img_height, img_width)
-        append_to_turbo_ddcm_old_protocol_theoretical_csv(theoretical_csv_path, target_bpp, M, theoretical_bpp, T, K, C)
-    
-    results_dir = os.path.join(project_root, 'results', 'compression_ratio_estimate', 'turbo_ddcm_old_protocol')
-    os.makedirs(results_dir, exist_ok=True)
-    
-    for target_bpp in target_bpps:
-        compression_dir = os.path.join(results_dir, f'dataset_Kodack24_turbo_ddcm_old_protocol_bpp{target_bpp}_compressed')
-        decompression_dir = os.path.join(results_dir, f'dataset_Kodack24_turbo_ddcm_old_protocol_bpp{target_bpp}_decompressed')
-        os.makedirs(compression_dir, exist_ok=True)
-        os.makedirs(decompression_dir, exist_ok=True)
-        M = turbo_ddcm_Ms[target_bpp]
-        
-        temp_input_dir = os.path.join(compression_dir, 'temp_input')
-        os.makedirs(temp_input_dir, exist_ok=True)
-        for img_file in sample_images:
-            src_path = os.path.join(dataset_path, img_file)
-            dst_path = os.path.join(temp_input_dir, img_file)
-            shutil.copy(src_path, dst_path)
-        
-        roundtrip_script = os.path.join(turbo_ddcm_path, 'roundtrip.py')
-        cmd = [
-            sys.executable, roundtrip_script,
-            '--input_dir', os.path.abspath(temp_input_dir),
-            '--output_compression_dir', os.path.abspath(compression_dir),
-            '--output_decompression_dir', os.path.abspath(decompression_dir),
-            '--M', str(M),
-            '--T', str(T),
-            '--K', str(K),
-            '--seed', str(seed),
-            '--old_protocol',
-            '--save_reconstructions'
-        ]
-        if manual_list_ind:
-            cmd.append('--manual_list_ind')
-        subprocess.run(cmd, check=True, cwd=turbo_ddcm_path)
-        
-        actual_bpps = []
-        for img_file in sample_images:
-            base_name = os.path.splitext(img_file)[0]
-            binary_path = os.path.join(compression_dir, f'{base_name}{utils.BIN_SUFFIX}')
-            if os.path.exists(binary_path):
-                actual_bpp = calculate_actual_bpp(binary_path, img_height, img_width)
-                actual_bpps.append(actual_bpp)
-                new_binary = os.path.join(compression_dir, f'{base_name}_M{M}{utils.BIN_SUFFIX}')
-                os.rename(binary_path, new_binary)
-        
-        avg_actual_bpp = sum(actual_bpps) / len(actual_bpps) if actual_bpps else 0
-        turbo_ddcm_actual_bpps[target_bpp] = avg_actual_bpp
-        append_to_turbo_ddcm_old_protocol_actual_csv(actual_csv_path, target_bpp, M, avg_actual_bpp, T, K, C)
-        
-        for img_file in sample_images:
-            base_name = os.path.splitext(img_file)[0]
-            recon_path = os.path.join(decompression_dir, img_file)
-            new_recon = os.path.join(decompression_dir, f'{base_name}_M{M}.png')
-            if os.path.exists(recon_path):
-                os.rename(recon_path, new_recon)
-        
-        shutil.rmtree(temp_input_dir)
-    
-    return turbo_ddcm_Ms, T, K, turbo_ddcm_actual_bpps
 
-def run_ddcm_experiment(dataset_path, sample_images, target_bpps, project_root, theoretical_csv_path, actual_csv_path):
-    T = 1000
-    K = 8192
-    C = 3
-    t_range = (999, 0)
-    model_id = "Manojb/stable-diffusion-2-1-base"
-    imsize = 512
-    optimized_Ts = T  # Approximation for t_range=(999,0)
-    ddcm_path = os.path.join(project_root, 'ddcm-compressed-image-generation-main')
-    
-    ddcm_Ms = {}
-    
-    for target_bpp in target_bpps:
-        M = find_ddcm_M_for_bpp(target_bpp, T, K, C, imsize, t_range)
-        ddcm_Ms[target_bpp] = M
-        theoretical_bpp = ddcm_bpp(T, K, M, C, imsize, optimized_Ts)
-        append_to_ddcm_theoretical_csv(theoretical_csv_path, target_bpp, M, theoretical_bpp, T, K, C)
-    
-    results_dir = os.path.join(project_root, 'results', 'compression_ratio_estimate', 'ddcm')
-    os.makedirs(results_dir, exist_ok=True)
-    
-    for target_bpp in target_bpps:
-        output_dir = os.path.join(results_dir, f'dataset_Kodack24_ddcm_bpp{target_bpp}')
-        os.makedirs(output_dir, exist_ok=True)
-        M = ddcm_Ms[target_bpp]
-        
-        temp_input_dir = os.path.join(output_dir, 'temp_input')
-        images_subdir = os.path.join(temp_input_dir, 'images')
-        os.makedirs(images_subdir, exist_ok=True)
-        for img_file in sample_images:
-            src_path = os.path.join(dataset_path, img_file)
-            dst_path = os.path.join(images_subdir, img_file)
-            shutil.copy(src_path, dst_path)
-        
-        roundtrip_script = os.path.join(ddcm_path, 'latent_compression.py')
-        # Use relative paths to avoid DDCM's path stripping bug
-        rel_input_dir = os.path.relpath(images_subdir, ddcm_path)
-        rel_output_dir = os.path.relpath(output_dir, ddcm_path)
-        cmd = [
-            sys.executable, roundtrip_script,
-            'roundtrip',
-            '--input_dir', rel_input_dir,
-            '--output_dir', rel_output_dir,
-            '--model_id', model_id,
-            '--num_noises', str(K),
-            '--timesteps', str(T),
-            '--num_pursuit_noises', str(M),
-            '--num_pursuit_coef_bits', str(C),
-            '--gpu', '0',
-            '--float16'
-        ]
-        subprocess.run(cmd, check=True, cwd=ddcm_path)
-        
-        actual_bpps = []
-        out_prefix = f'T={T}_in{t_range[0]}-{t_range[1]}_K={K}_M={M}_C={C}_model={model_id.split("/")[1]}'
-        for img_file in sample_images:
-            base_name = os.path.splitext(img_file)[0]
-            # DDCM saves files directly under out_prefix/ (not in images/ subdirectory)
-            bin_file = os.path.join(output_dir, out_prefix, f'{base_name}_noise_indices.bin')
-            if os.path.exists(bin_file):
-                actual_bpp = calculate_actual_bpp(bin_file, imsize, imsize)
-                actual_bpps.append(actual_bpp)
-        
-        avg_actual_bpp = sum(actual_bpps) / len(actual_bpps) if actual_bpps else 0
-        append_to_ddcm_actual_csv(actual_csv_path, target_bpp, M, avg_actual_bpp, T, K, C)
-        
-        shutil.rmtree(temp_input_dir)
-    
-    return ddcm_Ms
-
-def init_jpeg_csv(project_root):
-    results_dir = os.path.join(project_root, 'results', 'compression_ratio_estimate', 'jpeg')
-    os.makedirs(results_dir, exist_ok=True)
-    csv_path = os.path.join(results_dir, 'jpeg_compression_params.csv')
-    with open(csv_path, 'w', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow(['image_file', 'target_bpp', 'quality', 'actual_bpp'])
-    return csv_path
-
-def append_to_jpeg_csv(csv_path, image_file, target_bpp, quality, actual_bpp):
-    with open(csv_path, 'a', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow([image_file, target_bpp, quality, actual_bpp])
-
-def init_turbo_ddcm_theoretical_csv(project_root):
-    results_dir = os.path.join(project_root, 'results', 'compression_ratio_estimate', 'turbo_ddcm')
-    os.makedirs(results_dir, exist_ok=True)
-    csv_path = os.path.join(results_dir, 'turbo_ddcm_theoretical_bpp.csv')
-    with open(csv_path, 'w', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow(['target_bpp', 'M', 'theoretical_bpp', 'T', 'K', 'C'])
-    return csv_path
-
-def append_to_turbo_ddcm_theoretical_csv(csv_path, target_bpp, M, theoretical_bpp, T, K, C):
-    with open(csv_path, 'a', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow([target_bpp, M, theoretical_bpp, T, K, C])
-
-def init_turbo_ddcm_actual_csv(project_root):
-    results_dir = os.path.join(project_root, 'results', 'compression_ratio_estimate', 'turbo_ddcm')
-    os.makedirs(results_dir, exist_ok=True)
-    csv_path = os.path.join(results_dir, 'turbo_ddcm_actual_bpp.csv')
-    with open(csv_path, 'w', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow(['target_bpp', 'M', 'actual_bpp', 'T', 'K', 'C'])
-    return csv_path
-
-def append_to_turbo_ddcm_actual_csv(csv_path, target_bpp, M, actual_bpp, T, K, C):
-    with open(csv_path, 'a', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow([target_bpp, M, actual_bpp, T, K, C])
-
-def init_turbo_ddcm_old_protocol_theoretical_csv(project_root):
-    results_dir = os.path.join(project_root, 'results', 'compression_ratio_estimate', 'turbo_ddcm_old_protocol')
-    os.makedirs(results_dir, exist_ok=True)
-    csv_path = os.path.join(results_dir, 'turbo_ddcm_old_protocol_theoretical_bpp.csv')
-    with open(csv_path, 'w', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow(['target_bpp', 'M', 'theoretical_bpp', 'T', 'K', 'C'])
-    return csv_path
-
-def append_to_turbo_ddcm_old_protocol_theoretical_csv(csv_path, target_bpp, M, theoretical_bpp, T, K, C):
-    with open(csv_path, 'a', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow([target_bpp, M, theoretical_bpp, T, K, C])
-
-def init_turbo_ddcm_old_protocol_actual_csv(project_root):
-    results_dir = os.path.join(project_root, 'results', 'compression_ratio_estimate', 'turbo_ddcm_old_protocol')
-    os.makedirs(results_dir, exist_ok=True)
-    csv_path = os.path.join(results_dir, 'turbo_ddcm_old_protocol_actual_bpp.csv')
-    with open(csv_path, 'w', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow(['target_bpp', 'M', 'actual_bpp', 'T', 'K', 'C'])
-    return csv_path
-
-def append_to_turbo_ddcm_old_protocol_actual_csv(csv_path, target_bpp, M, actual_bpp, T, K, C):
-    with open(csv_path, 'a', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow([target_bpp, M, actual_bpp, T, K, C])
-
-def init_ddcm_theoretical_csv(project_root):
-    results_dir = os.path.join(project_root, 'results', 'compression_ratio_estimate', 'ddcm')
-    os.makedirs(results_dir, exist_ok=True)
-    csv_path = os.path.join(results_dir, 'ddcm_theoretical_bpp.csv')
-    with open(csv_path, 'w', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow(['target_bpp', 'M', 'theoretical_bpp', 'T', 'K', 'C'])
-    return csv_path
-
-def append_to_ddcm_theoretical_csv(csv_path, target_bpp, M, theoretical_bpp, T, K, C):
-    with open(csv_path, 'a', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow([target_bpp, M, theoretical_bpp, T, K, C])
-
-def init_ddcm_actual_csv(project_root):
-    results_dir = os.path.join(project_root, 'results', 'compression_ratio_estimate', 'ddcm')
-    os.makedirs(results_dir, exist_ok=True)
-    csv_path = os.path.join(results_dir, 'ddcm_actual_bpp.csv')
-    with open(csv_path, 'w', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow(['target_bpp', 'M', 'actual_bpp', 'T', 'K', 'C'])
-    return csv_path
-
-def append_to_ddcm_actual_csv(csv_path, target_bpp, M, actual_bpp, T, K, C):
-    with open(csv_path, 'a', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow([target_bpp, M, actual_bpp, T, K, C])
-
-def main():
-    parser = argparse.ArgumentParser(description='Find compression parameters for different algorithms')
-    parser.add_argument('--algorithms', nargs='+', 
-                       choices=['jpeg', 'ddcm', 'turbo_ddcm', 'turbo_ddcm_old_protocol', 'all'],
-                       default=['all'],
-                       help='Algorithms to run (default: all)')
-    parser.add_argument('--bpp', nargs='+', type=float, 
-                       choices=[0.1, 0.5, 1.0],
-                       default=[0.1, 0.5, 1.0],
-                       help='Target BPP values (default: 0.1 0.5 1.0)')
-    parser.add_argument('--dataset', type=str, default=None,
-                       help='Path to dataset directory (default: dataset_Kodack24 in project root)')
-    parser.add_argument('--num_samples', type=int, default=2,
-                       help='Number of sample images to use for DDCM and Turbo-DDCM experiments (default: 2)')
-    parser.add_argument('--manual_list_ind', action='store_true', default=False,
-                       help='Use manual list index for Turbo-DDCM (default: False)')
-    
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Find compression parameters for different algorithms")
+    parser.add_argument("--algorithms", nargs="+", choices=ALL_ALGOS + ["all"], default=["all"])
+    parser.add_argument("--bpp", nargs="+", type=float, choices=[0.1, 0.5, 1.0], default=[0.1, 0.5, 1.0])
+    parser.add_argument("--dataset", type=str, default=None)
+    parser.add_argument("--subset", type=str, default=None, help="'0-4' or '0,2,5'")
+    parser.add_argument("--height", type=int, default=512)
+    parser.add_argument("--width", type=int, default=512)
     args = parser.parse_args()
-    
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(script_dir)
-    
-    # Determine which algorithms to run
-    if 'all' in args.algorithms:
-        algorithms_to_run = ['jpeg', 'ddcm', 'turbo_ddcm', 'turbo_ddcm_old_protocol']
-    else:
-        algorithms_to_run = args.algorithms
-    
-    # Set dataset path
-    if args.dataset:
-        dataset_path = args.dataset
-    else:
-        dataset_path = os.path.join(project_root, 'dataset_Kodack24')
-    
-    target_bpps = args.bpp
-    num_samples = args.num_samples
-    
-    print(f"\n{'='*60}")
-    print(f"Finding compression parameters")
-    print(f"Algorithms: {', '.join(algorithms_to_run)}")
-    print(f"Target BPPs: {target_bpps}")
-    print(f"Dataset: {dataset_path}")
-    print(f"Sample images for DDCM/Turbo-DDCM: {num_samples}")
-    print(f"{'='*60}\n")
-    
-    sample_images = get_sample_images(dataset_path, num_samples=num_samples)
-    all_images = get_all_images(dataset_path)
-    
-    # Initialize CSV files only for algorithms we'll run
-    if 'jpeg' in algorithms_to_run:
-        jpeg_csv_path = init_jpeg_csv(project_root)
-    if 'turbo_ddcm' in algorithms_to_run:
-        turbo_ddcm_theoretical_csv = init_turbo_ddcm_theoretical_csv(project_root)
-        turbo_ddcm_actual_csv = init_turbo_ddcm_actual_csv(project_root)
-    if 'turbo_ddcm_old_protocol' in algorithms_to_run:
-        turbo_ddcm_old_protocol_theoretical_csv = init_turbo_ddcm_old_protocol_theoretical_csv(project_root)
-        turbo_ddcm_old_protocol_actual_csv = init_turbo_ddcm_old_protocol_actual_csv(project_root)
-    if 'ddcm' in algorithms_to_run:
-        ddcm_theoretical_csv = init_ddcm_theoretical_csv(project_root)
-        ddcm_actual_csv = init_ddcm_actual_csv(project_root)
-    
-    # Run experiments
-    if 'jpeg' in algorithms_to_run:
-        print(f"\n{'='*60}")
-        print(f"Running JPEG experiments")
-        print(f"{'='*60}")
-        jpeg_qualities, jpeg_actual_bpps = run_jpeg_experiment(dataset_path, all_images, target_bpps, project_root, jpeg_csv_path)
-        print(f"✓ JPEG experiments complete")
-    
-    if 'ddcm' in algorithms_to_run:
-        print(f"\n{'='*60}")
-        print(f"Running DDCM experiments")
-        print(f"{'='*60}")
-        ddcm_Ms = run_ddcm_experiment(dataset_path, sample_images, target_bpps, project_root, ddcm_theoretical_csv, ddcm_actual_csv)
-        print(f"✓ DDCM experiments complete")
-    
-    if 'turbo_ddcm' in algorithms_to_run:
-        print(f"\n{'='*60}")
-        print(f"Running Turbo-DDCM experiments")
-        print(f"{'='*60}")
-        turbo_ddcm_Ms, T, K, turbo_ddcm_actual_bpps = run_turbo_ddcm_experiment(dataset_path, sample_images, target_bpps, project_root, turbo_ddcm_theoretical_csv, turbo_ddcm_actual_csv)
-        print(f"✓ Turbo-DDCM experiments complete")
-    
-    if 'turbo_ddcm_old_protocol' in algorithms_to_run:
-        print(f"\n{'='*60}")
-        print(f"Running Turbo-DDCM Old Protocol experiments")
-        print(f"{'='*60}")
-        turbo_ddcm_old_protocol_Ms, T_old, K_old, turbo_ddcm_old_protocol_actual_bpps = run_turbo_ddcm_old_protocol_experiment(dataset_path, sample_images, target_bpps, project_root, turbo_ddcm_old_protocol_theoretical_csv, turbo_ddcm_old_protocol_actual_csv, args.manual_list_ind)
-        print(f"✓ Turbo-DDCM Old Protocol experiments complete")
-    
-    print(f"\n{'='*60}")
-    print(f"All selected experiments complete!")
-    print(f"{'='*60}\n")
+
+    project_root = os.path.dirname(_script_dir)
+    dataset_path = args.dataset or os.path.join(project_root, "dataset")
+    algorithms_to_run = ALL_ALGOS if "all" in args.algorithms else args.algorithms
+    all_images = get_images(dataset_path)
+    subset = parse_subset(args.subset) if args.subset else None
+
+    print(f"\n{'=' * 60}\nFinding compression parameters\nAlgorithms: {', '.join(algorithms_to_run)}\nTarget BPPs: {args.bpp}\nDataset: {dataset_path}\nResolution: {args.height}x{args.width}\nSubset: {args.subset or 'all'}\n{'=' * 60}\n")
+
+    for algo in algorithms_to_run:
+        csv_path = init_csv_for_algorithm(project_root, algo)
+        print(f"Running {algo}...")
+        run_experiment(algo, dataset_path, all_images, args.bpp, project_root, csv_path, args.height, args.width, subset)
+        print(f"✓ {algo} done")
+
+    print(f"\n{'=' * 60}\nAll complete\n{'=' * 60}\n")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
