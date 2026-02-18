@@ -54,7 +54,7 @@ class TurboModelRunner(BaseModelRunner):
             self.model_params = dict(default)
         self.name = "robust_turbo_ddcm" if self.model_params.get("old_protocol", False) else "turbo_ddcm"
 
-    def get_model_params(self) -> Dict[str, object]:
+    def get_model_params(self) -> Dict[str, Any]:
         return dict(self.model_params)
 
     def path_for_compressed(self, compressed_dir: str, base: str) -> Optional[str]:
@@ -97,17 +97,22 @@ class TurboModelRunner(BaseModelRunner):
         *,
         img_height: int,
         img_width: int,
-        params: Dict[str, Any],
     ) -> Dict[str, str]:
+        params = self.get_model_params()
+        print(f"[TurboModelRunner] Model params: {params}")
         resolved_params = self._resolve_params(params)
         os.makedirs(output_dir, exist_ok=True)
         image_files = list_png_sorted(input_dir)
         errors: Dict[str, str] = {}
+        input_abs = os.path.abspath(input_dir)
+        output_abs = os.path.abspath(output_dir)
+        cwd = os.getcwd()
         try:
+            os.chdir(self.turbo_root)
             turbo_compress, _ = self._get_api()
             turbo_compress(
-                input_dir=input_dir,
-                output_dir=output_dir,
+                input_dir=input_abs,
+                output_dir=output_abs,
                 M=int(resolved_params["M"]),
                 gpu=0,
                 float32=False,
@@ -122,13 +127,15 @@ class TurboModelRunner(BaseModelRunner):
             )
             for image_file in image_files:
                 base = os.path.splitext(image_file)[0]
-                out = os.path.join(output_dir, f"{base}{turbo_utils.BIN_SUFFIX}")
+                out = os.path.join(output_abs, f"{base}{turbo_utils.BIN_SUFFIX}")
                 if not os.path.exists(out):
                     errors[image_file] = "missing Turbo binary output"
                     continue
         except Exception as exc:
             for image_file in image_files:
                 errors[image_file] = str(exc)
+        finally:
+            os.chdir(cwd)
 
         return errors
 

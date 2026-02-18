@@ -38,7 +38,7 @@ MAIL_TYPE=ALL # Valid values are NONE, BEGIN, END, FAIL, REQUEUE, ALL
 # Conda parameters
 #
 CONDA_HOME=$HOME/miniconda3
-CONDA_ENV=turbo_ddcm
+CONDA_ENV=turbo_ddcm_clean
 
 sbatch \
 	-p nlp\

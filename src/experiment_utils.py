@@ -144,6 +144,27 @@ def avg_or_zero(values):
     return sum(values) / len(values) if values else 0
 
 
+def load_jpeg_quality_csv(csv_path: str, target_bpp: float = None) -> dict:
+    """Load quality per image from CSV (columns image_file, quality; optional target_bpp). Returns {image_file: quality}."""
+    result = {}
+    with open(csv_path, newline="") as f:
+        reader = csv.DictReader(f)
+        fieldnames = reader.fieldnames or []
+        if "quality" not in fieldnames:
+            raise ValueError(f"JPEG quality CSV must have 'quality' column: {csv_path}")
+        for row in reader:
+            if target_bpp is not None and "target_bpp" in row:
+                try:
+                    if float(row["target_bpp"]) != target_bpp:
+                        continue
+                except (ValueError, TypeError):
+                    continue
+            img_col = "image_file" if "image_file" in row else (fieldnames[0] if fieldnames else "")
+            if img_col and "quality" in row:
+                result[str(row[img_col]).strip()] = int(row["quality"])
+    return result
+
+
 def flip_bits(binary_path: str, ber: float, output_path: str) -> int:
     """Apply BER bit-flip noise to a binary file. Returns number of bits flipped."""
     with open(binary_path, "rb") as f:

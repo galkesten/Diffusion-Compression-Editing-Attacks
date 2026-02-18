@@ -33,40 +33,74 @@ def compute_patch_fid(
     *,
     dataset_name: Optional[str] = None,
 ) -> float:
-    """Patch FID between ref_dir and gen_dir. Patch size is derived from dataset_name via FID_PATCH_SIZES, or DEFAULT_FID_PATCH_SIZE if dataset_name is None."""
+
     patch_size = get_fid_patch_size(dataset_name) if dataset_name is not None else DEFAULT_FID_PATCH_SIZE
     if device is None:
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    try:
-        from neuralcompression.metrics import update_patch_fid
-    except ImportError as e:
-        raise ImportError(
-            "neuralcompression is required for FID. Install with: pip install neuralcompression"
-        ) from e
-    try:
-        from torchmetrics.image import FrechetInceptionDistance
-    except ImportError as e:
-        raise ImportError("torchmetrics is required for FID. Install with: pip install torchmetrics") from e
+    print(f"[FID] Dataset: {dataset_name}")
+    print(f"[FID] Patch size: {patch_size}")
+    print(f"[FID] Device: {device}")
+
+    from neuralcompression.metrics import update_patch_fid
+    from torchmetrics.image import FrechetInceptionDistance
 
     FID = FrechetInceptionDistance(normalize=True).to(device)
+
     n_pairs = 0
+    total_patches = 0
+    missing: List[str] = []
 
     for img_file in image_files:
         if not any(img_file.lower().endswith(ext) for ext in (".png", ".jpg", ".jpeg")):
             continue
-        ref_path = os.path.join(ref_dir, img_file)
-        gen_path = os.path.join(gen_dir, img_file)
+
+        ref_path = os.path.abspath(os.path.join(ref_dir, img_file))
+        gen_path = os.path.abspath(os.path.join(gen_dir, img_file))
+        print(f"[FID] ref_path: {ref_path}")
+        print(f"[FID] gen_path: {gen_path}")
         if not os.path.isfile(ref_path) or not os.path.isfile(gen_path):
+            missing.append(img_file)
             continue
+
         gt_img = to_tensor(Image.open(ref_path).convert("RGB")).to(device).unsqueeze(0)
         rec_img = to_tensor(Image.open(gen_path).convert("RGB")).to(device).unsqueeze(0)
         assert gt_img.shape == rec_img.shape, (
-            f"FID requires ref and rec same shape (no interpolation). Got {gt_img.shape} vs {rec_img.shape} for {img_file}"
+            f"FID requires same shape. Got {gt_img.shape} vs {rec_img.shape} for {img_file}"
         )
+
+        # count patches
+        h, w = gt_img.shape[-2:]
+        patches = (h // patch_size) * (w // patch_size)
+        total_patches += patches
+
         update_patch_fid(gt_img, rec_img, fid_metric=FID, patch_size=patch_size)
         n_pairs += 1
 
+    if missing:
+        print("[FID] Skipping %d missing pair(s): %s" % (len(missing), missing[:5] if len(missing) > 5 else missing))
+    print("[FID] Images used: %d" % n_pairs)
+    print("[FID] Total patches: %d" % total_patches)
+
     if n_pairs == 0:
+        print("[FID] No valid image pairs — returning NaN")
         return float("nan")
-    return float(FID.compute().item())
+
+    # inspect internal feature tensors
+    try:
+        real = getattr(FID, "_features_real", None)
+        fake = getattr(FID, "_features_fake", None)
+
+        if real is not None and fake is not None:
+            print("[FID] real feature vectors:", real.shape)
+            print("[FID] fake feature vectors:", fake.shape)
+        else:
+            print("[FID] Feature buffers not populated yet")
+    except Exception as e:
+        print("[FID] Could not access internal feature tensors:", e)
+
+
+    fid_value = float(FID.compute().item())
+    print(f"[FID] Final FID: {fid_value}")
+
+    return fid_value

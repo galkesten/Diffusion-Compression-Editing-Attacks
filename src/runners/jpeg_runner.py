@@ -2,26 +2,19 @@ import os
 import shutil
 from typing import Any, Dict, Optional
 
-import pandas as pd
 from PIL import Image
 
 from .base import BaseModelRunner, list_png_sorted, list_files_sorted
 
 
-def _load_jpeg_quality_csv(csv_path: str) -> Dict[str, int]:
-    """Load quality per image from CSV with columns image_file and quality."""
-    df = pd.read_csv(csv_path)
-    if "quality" not in df.columns:
-        raise ValueError(f"JPEG quality CSV must have a 'quality' column: {csv_path}")
-    image_col = "image_file" if "image_file" in df.columns else df.columns[0]
-    return dict(zip(df[image_col].astype(str), df["quality"].astype(int)))
-
-
 class JpegModelRunner(BaseModelRunner):
     name = "jpeg"
 
-    def get_model_params(self) -> Dict[str, object]:
-        return {}
+    def __init__(self, quality_by_image: Dict[str, int]):
+        self.quality_by_image = dict(quality_by_image)
+
+    def get_model_params(self) -> Dict[str, Any]:
+        return {"quality_by_image": self.quality_by_image}
 
     def path_for_compressed(self, compressed_dir: str, base: str) -> Optional[str]:
         p = os.path.join(compressed_dir, f"{base}_compressed.jpg")
@@ -37,11 +30,6 @@ class JpegModelRunner(BaseModelRunner):
         p = os.path.join(temp_dir, f"{base}_decompressed.png")
         return p if os.path.isfile(p) else None
 
-    def get_baseline_params(self, jpeg_quality_csv: Optional[str] = None) -> Dict[str, Any]:
-        if not jpeg_quality_csv or not os.path.isfile(jpeg_quality_csv):
-            raise ValueError("JPEG requires jpeg_quality_csv (CSV with columns image_file, quality)")
-        return {"quality_by_image": _load_jpeg_quality_csv(jpeg_quality_csv)}
-
     def run_compression(
         self,
         input_dir: str,
@@ -49,9 +37,8 @@ class JpegModelRunner(BaseModelRunner):
         *,
         img_height: int,
         img_width: int,
-        params: Dict[str, Any],
     ) -> Dict[str, str]:
-    
+        params = self.get_model_params()
         os.makedirs(output_dir, exist_ok=True)
         image_files = list_png_sorted(input_dir)
         quality_by_image: Dict[str, int] = params.get("quality_by_image", {})

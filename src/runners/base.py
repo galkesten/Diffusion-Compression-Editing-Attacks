@@ -13,7 +13,8 @@ class BaseModelRunner(ABC):
     name: str
 
     @abstractmethod
-    def get_model_params(self) -> Dict[str, object]:
+    def get_model_params(self) -> Dict[str, Any]:
+        """Return compression params (set in __init__)."""
         raise NotImplementedError
 
     @abstractmethod
@@ -24,9 +25,8 @@ class BaseModelRunner(ABC):
         *,
         img_height: int,
         img_width: int,
-        params: Dict[str, Any],
     ) -> Dict[str, str]:
-        """Return errors dict: image_file -> error message. Empty dict if no errors."""
+        """Return errors dict: image_file -> error message. Empty dict if no errors. Uses params set in __init__."""
         raise NotImplementedError
 
     @abstractmethod
@@ -60,10 +60,6 @@ class BaseModelRunner(ABC):
     def find_decompressed_png(self, temp_dir: str, base: str) -> Optional[str]:
         """Path to the decompressed PNG in temp_dir after run_decompression. None if not found."""
         raise NotImplementedError
-
-    def get_baseline_params(self, jpeg_quality_csv: Optional[str] = None) -> Dict[str, Any]:
-        """Params for baseline compression. Default: get_model_params(). JPEG runner overrides and requires jpeg_quality_csv."""
-        return dict(self.get_model_params())
 
 
 def _stem_key(name: str):

@@ -10,6 +10,17 @@ import shutil
 import sys
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+_project_root = os.path.dirname(_script_dir)
+if _script_dir not in sys.path:
+    sys.path.insert(0, _script_dir)
+for _path in (
+    os.path.join(_project_root, "ddcm-compressed-image-generation-main"),
+    os.path.join(_project_root, "Turbo-DDCM-master"),
+):
+    if _path not in sys.path:
+        sys.path.insert(0, _path)
+
 import numpy as np
 from PIL import Image
 import torch
@@ -27,10 +38,6 @@ from experiment_utils import (
     resolve_subset,
 )
 from runners import BaseModelRunner, DdcmModelRunner, JpegModelRunner, TurboModelRunner
-
-_script_dir = os.path.dirname(os.path.abspath(__file__))
-if _script_dir not in sys.path:
-    sys.path.insert(0, _script_dir)
 
 
 AlgoConfigItem = Dict[str, Any]  # runner_factory, prepare_params, output_dir_name, path_for_compressed, csv_*, write_csv_rows
@@ -80,6 +87,12 @@ def find_ddcm_M_for_bpp(target_bpp, T, K, C, img_height, img_width):
 # ---------------------------------------------------------------------------
 # Per-algorithm behavior (used inside ALGO_CONFIG)
 # ---------------------------------------------------------------------------
+def _jpeg_runner_factory(_root: str, params_info: Optional[Dict[str, Any]]) -> JpegModelRunner:
+    params = params_info["params"] if params_info else {}
+    quality_by_image = params.get("quality_by_image", {})
+    return JpegModelRunner(quality_by_image=quality_by_image)
+
+
 def _prepare_params_jpeg(target_bpp: float, dataset_path: str, images_to_use: List[str], img_height: int, img_width: int, resize_to: Tuple[int, int], _params: Dict[str, Any]) -> Dict[str, Any]:
     quality_by_image = {}
     for img_file in images_to_use:
@@ -109,6 +122,7 @@ def _prepare_params_turbo(target_bpp: float, _dataset_path: str, _images_to_use:
     find_m = find_robust_turbo_ddcm_M_for_bpp if p.get("old_protocol") else find_turbo_ddcm_M_for_bpp
     bpp_fn = turbo_utils.turbo_ddcm_bpp_old if p.get("old_protocol") else turbo_utils.turbo_ddcm_bpp
     M = find_m(target_bpp, T, K, C, img_height, img_width)
+    print(f"M: {M}")
     theoretical = _turbo_bpp_with_manual_list_ind(T, K, M, C, img_height, img_width, bpp_fn)
     return {"params": {**p, "M": M}, "theoretical": theoretical, "M": M, "T": T, "K": K, "C": C}
 
@@ -161,7 +175,7 @@ def _make_config(
 ALGO_CONFIG: Dict[str, AlgoConfigItem] = {
     "jpeg": _make_config(
         params={},
-        runner_factory=lambda _root: JpegModelRunner(),
+        runner_factory=_jpeg_runner_factory,
         prepare_params=_prepare_params_jpeg,
         output_dir_name=lambda dataset_name, target_bpp, _algo: f"{dataset_name}_jpeg_bpp{target_bpp}",
         path_for_compressed=lambda out_dir, base, _pi: os.path.join(out_dir, f"{base}_compressed.jpg"),
@@ -172,7 +186,7 @@ ALGO_CONFIG: Dict[str, AlgoConfigItem] = {
     ),
     "ddcm": _make_config(
         params={"T": 1000, "K": 8192, "C": 3, "t_range": (999, 0), "model_id": "Manojb/stable-diffusion-2-1-base"},
-        runner_factory=lambda root: DdcmModelRunner(root),
+        runner_factory=lambda root, params_info=None: DdcmModelRunner(root, model_params=params_info["params"] if params_info else None),
         prepare_params=_prepare_params_ddcm,
         output_dir_name=lambda dataset_name, target_bpp, _algo: f"{dataset_name}_ddcm_bpp{target_bpp}_compressed",
         path_for_compressed=lambda out_dir, base, pi: os.path.join(out_dir, pi["out_prefix"], f"{base}_noise_indices.bin"),
@@ -183,7 +197,7 @@ ALGO_CONFIG: Dict[str, AlgoConfigItem] = {
     ),
     "turbo_ddcm": _make_config(
         params={"T": 30, "K": 16384, "C": 1, "seed": 88888888, "old_protocol": False, "manual_list_ind": True},
-        runner_factory=lambda root: TurboModelRunner(root, robust=False),
+        runner_factory=lambda root, params_info=None: TurboModelRunner(root, robust=False, model_params=params_info["params"] if params_info else None),
         prepare_params=_prepare_params_turbo,
         output_dir_name=lambda dataset_name, target_bpp, algo: f"{dataset_name}_{algo}_bpp{target_bpp}_compressed",
         path_for_compressed=lambda out_dir, base, _pi: os.path.join(out_dir, f"{base}{turbo_utils.BIN_SUFFIX}"),
@@ -194,7 +208,7 @@ ALGO_CONFIG: Dict[str, AlgoConfigItem] = {
     ),
     "robust_turbo_ddcm": _make_config(
         params={"T": 30, "K": 16384, "C": 1, "seed": 88888888, "old_protocol": True, "manual_list_ind": True},
-        runner_factory=lambda root: TurboModelRunner(root, robust=True),
+        runner_factory=lambda root, params_info=None: TurboModelRunner(root, robust=True, model_params=params_info["params"] if params_info else None),
         prepare_params=_prepare_params_turbo,
         output_dir_name=lambda dataset_name, target_bpp, algo: f"{dataset_name}_{algo}_bpp{target_bpp}_compressed",
         path_for_compressed=lambda out_dir, base, _pi: os.path.join(out_dir, f"{base}{turbo_utils.BIN_SUFFIX}"),
@@ -219,7 +233,6 @@ def run_experiment(
     subset: Any = None,
 ) -> None:
     cfg = ALGO_CONFIG[algorithm]
-    runner = cfg["runner_factory"](project_root)
     prepare_params = cfg["prepare_params"]
     output_dir_name = cfg["output_dir_name"]
     path_for_compressed = cfg["path_for_compressed"]
@@ -242,7 +255,8 @@ def run_experiment(
             shutil.rmtree(staging_dir)
 
         prepare_input_dir(dataset_path, all_images, staging_dir, subset=subset)
-        errors = runner.run_compression(staging_dir, output_dir, img_height=img_height, img_width=img_width, params=params_info["params"])
+        runner = cfg["runner_factory"](project_root, params_info)
+        errors = runner.run_compression(staging_dir, output_dir, img_height=img_height, img_width=img_width)
         decomp_errors = runner.run_decompression(output_dir, img_height=img_height, img_width=img_width)
         errors = {**errors, **decomp_errors}
 

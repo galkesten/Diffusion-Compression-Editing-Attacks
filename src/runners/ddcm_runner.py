@@ -67,7 +67,7 @@ class DdcmModelRunner(BaseModelRunner):
         from ddcm_api import main_programmatic as ddcm_main_programmatic  # type: ignore
         return ddcm_main_programmatic
 
-    def get_model_params(self) -> Dict[str, object]:
+    def get_model_params(self) -> Dict[str, Any]:
         return dict(self.model_params)
 
     def _resolve_params(self, runtime_params: Dict[str, Any]) -> Dict[str, Any]:
@@ -84,8 +84,9 @@ class DdcmModelRunner(BaseModelRunner):
         *,
         img_height: int,
         img_width: int,
-        params: Dict[str, Any],
     ) -> Dict[str, str]:
+        params = self.get_model_params()
+        print(f"[DdcmModelRunner] Model params: {params}")
         resolved = self._resolve_params(params)
         input_abs = os.path.abspath(input_dir)
         output_abs = os.path.abspath(output_dir)

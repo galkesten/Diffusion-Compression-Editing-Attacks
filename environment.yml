@@ -1,0 +1,37 @@
+# Conda environment for src/ (noisy_channel_runner, FID, Turbo-DDCM, etc.)
+# Create: conda env create -f environment.yml
+# Then install PyTorch CUDA: pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+#
+# If "ImportError: lib...so: cannot open shared object file" appears for PIL:
+#   conda install -c conda-forge pillow --force-reinstall
+# That restores conda's Pillow and its native libs (avoids pip wheel expecting system libs).
+
+name: turbo_ddcm_clean
+
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.10
+  # Conda-installed (solved by conda). Use conda's Pillow so native libs match.
+  - numpy
+  - pillow
+  - libtiff
+  - openjpeg
+  - zlib-ng
+  - scikit-image
+  - pandas
+  - matplotlib
+  - setuptools
+  - pip
+  # Pip-installed after env create (pip may pull in another Pillow; if PIL breaks, reinstall pillow from conda)
+  - pip:
+    - torchmetrics
+    - neuralcompression
+    - pyiqa
+    # Turbo-DDCM (pinned for compatibility)
+    - diffusers==0.32.2
+    - transformers==4.43.0
+    - accelerate==1.3.0
+    - tqdm>=4.67.1
