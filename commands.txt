@@ -10,6 +10,17 @@ python src/find_compression_params.py --algorithms jpeg  --bpp 1.0 --dataset dat
 
 
 #experiment
+
+python src/noisy_channel_runner.py \
+  --algorithm jpeg \
+  --dataset dataset_Kodack24 \
+  --bpp 1.0 \
+  --num_trials 1 \
+  --jpeg_quality_csv results/compression_ratio_estimate/jpeg/jpeg_compression_params.csv \
+  --seed 42 \
+  --sample_images 0-5
+
+
 python src/noisy_channel_runner.py \
   --algorithm jpeg \
   --dataset dataset_Kodack24 \
