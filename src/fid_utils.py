@@ -57,8 +57,8 @@ def compute_patch_fid(
 
         ref_path = os.path.abspath(os.path.join(ref_dir, img_file))
         gen_path = os.path.abspath(os.path.join(gen_dir, img_file))
-        print(f"[FID] ref_path: {ref_path}")
-        print(f"[FID] gen_path: {gen_path}")
+        # print(f"[FID] ref_path: {ref_path}")
+        # print(f"[FID] gen_path: {gen_path}")
         if not os.path.isfile(ref_path) or not os.path.isfile(gen_path):
             missing.append(img_file)
             continue
@@ -79,25 +79,25 @@ def compute_patch_fid(
 
     if missing:
         print("[FID] Skipping %d missing pair(s): %s" % (len(missing), missing[:5] if len(missing) > 5 else missing))
-    print("[FID] Images used: %d" % n_pairs)
-    print("[FID] Total patches: %d" % total_patches)
+    # print("[FID] Images used: %d" % n_pairs)
+    # print("[FID] Total patches: %d" % total_patches)
 
     if n_pairs == 0:
         print("[FID] No valid image pairs — returning NaN")
         return float("nan")
 
     # inspect internal feature tensors
-    try:
-        real = getattr(FID, "_features_real", None)
-        fake = getattr(FID, "_features_fake", None)
-
-        if real is not None and fake is not None:
-            print("[FID] real feature vectors:", real.shape)
-            print("[FID] fake feature vectors:", fake.shape)
-        else:
-            print("[FID] Feature buffers not populated yet")
-    except Exception as e:
-        print("[FID] Could not access internal feature tensors:", e)
+    # try:
+    #     real = getattr(FID, "_features_real", None)
+    #     fake = getattr(FID, "_features_fake", None)
+    #
+    #     if real is not None and fake is not None:
+    #         print("[FID] real feature vectors:", real.shape)
+    #         print("[FID] fake feature vectors:", fake.shape)
+    #     else:
+    #         print("[FID] Feature buffers not populated yet")
+    # except Exception as e:
+    #     print("[FID] Could not access internal feature tensors:", e)
 
 
     fid_value = float(FID.compute().item())
