@@ -1,0 +1,16 @@
+{
+    "input_dir": "/home/galkesten/Diffusion-Compression-Editing-Attacks/results/noisy_channel/robust_turbo_ddcm/DIV2K_valid_HR_512/compressed/DIV2K_valid_HR_512_robust_turbo_ddcm_bpp0.1/temp_input",
+    "output_dir": "/home/galkesten/Diffusion-Compression-Editing-Attacks/results/noisy_channel/robust_turbo_ddcm/DIV2K_valid_HR_512/compressed/DIV2K_valid_HR_512_robust_turbo_ddcm_bpp0.1",
+    "M": 73,
+    "gpu": 0,
+    "float32": false,
+    "seed": 88888888,
+    "T": 30,
+    "K": 16384,
+    "weights_dir": null,
+    "save_reconstructions": false,
+    "save_runtimes": false,
+    "model_id": "Manojb/stable-diffusion-2-1-base",
+    "old_protocol": true,
+    "manual_list_ind": true
+}

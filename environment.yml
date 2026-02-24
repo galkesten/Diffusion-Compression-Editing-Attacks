@@ -23,6 +23,7 @@ dependencies:
   - scikit-image
   - pandas
   - matplotlib
+  - seaborn
   - jupyterlab
   - setuptools
   - pip

@@ -37,4 +37,4 @@ slurm-*
 *.tmp
 *.temp
 temp_input/
-
+results/noisy_channel/ddcm/DIV2K_valid_HR_512_run*/
