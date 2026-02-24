@@ -431,16 +431,19 @@ def run_baseline(
     target_bpp: float,
     resolution: int,
     jpeg_quality_csv: Optional[str] = None,
+    compressed_dir: Optional[str] = None,
 ) -> str:
     """Run compression (and decompression) for all images; return compressed_dir.
     DDCM/Turbo: use runner default params. JPEG: quality per image from jpeg_quality_csv (required).
+    If compressed_dir is given, use it; otherwise build default path under results/noisy_channel/...
     """
     from experiment_utils import prepare_input_dir
     quality_by_image = load_jpeg_quality_csv(jpeg_quality_csv, target_bpp) if algorithm == "jpeg" and jpeg_quality_csv and os.path.isfile(jpeg_quality_csv) else None
     runner = _runner_factory(project_root, algorithm, quality_by_image=quality_by_image)
     dataset_name = os.path.basename(os.path.normpath(dataset_path))
-    out_name = _output_dir_name(dataset_name, target_bpp, algorithm)
-    compressed_dir = os.path.join(project_root, "results", "noisy_channel", algorithm, dataset_name, "compressed", out_name)
+    if compressed_dir is None:
+        out_name = _output_dir_name(dataset_name, target_bpp, algorithm)
+        compressed_dir = os.path.join(project_root, "results", "noisy_channel", algorithm, dataset_name, "compressed", out_name)
     has_content = os.path.isdir(compressed_dir) and any(
         f for f in os.listdir(compressed_dir) if not f.startswith(".")
     )
@@ -475,6 +478,7 @@ def main():
     parser.add_argument("--num_samples_per_ber", type=int, default=5, help="Max samples to save per image per BER (only for images in --sample_images)")
     parser.add_argument("--sample_images", type=str, default=None, help="Image indices to save samples for, e.g. 0-5 or 0,2,5. Default: all.")
     parser.add_argument("--output_dir", type=str, default=None)
+    parser.add_argument("--run_id", type=int, default=None, help="If set, appended to dataset name in all result paths so parallel runs do not overwrite each other.")
     parser.add_argument("--compressed_dir", type=str, default=None, help="Precomputed compressed dir; if set, skip baseline")
     parser.add_argument("--jpeg_quality_csv", type=str, default=None, help="For JPEG: CSV with image_file, quality (required for baseline if algorithm=jpeg)")
     parser.add_argument("--seed", type=int, default=42)
@@ -486,10 +490,11 @@ def main():
     project_root = os.path.dirname(_script_dir)
     dataset_path = os.path.abspath(args.dataset or os.path.join(project_root, "dataset"))
     dataset_name = os.path.basename(os.path.normpath(dataset_path))
+    dataset_name_for_paths = (dataset_name + f"_run{args.run_id}") if args.run_id is not None else dataset_name
     image_files = get_images(dataset_path)
     sample_image_files = resolve_subset(image_files, parse_subset(args.sample_images)) if args.sample_images else None
     ber_values = list(args.ber)
-    output_dir = args.output_dir or os.path.join(project_root, "results", "noisy_channel", args.algorithm, dataset_name)
+    output_dir = args.output_dir or os.path.join(project_root, "results", "noisy_channel", args.algorithm, dataset_name_for_paths)
     compressed_dir = args.compressed_dir
 
     import torch
@@ -502,8 +507,8 @@ def main():
 
     if not compressed_dir:
         default_compressed_dir = os.path.join(
-            project_root, "results", "noisy_channel", args.algorithm, dataset_name, "compressed",
-            _output_dir_name(dataset_name, args.bpp, args.algorithm),
+            project_root, "results", "noisy_channel", args.algorithm, dataset_name_for_paths, "compressed",
+            _output_dir_name(dataset_name_for_paths, args.bpp, args.algorithm),
         )
         need_baseline = not os.path.isdir(default_compressed_dir) or not any(
             f for f in os.listdir(default_compressed_dir) if not f.startswith(".")
@@ -518,6 +523,7 @@ def main():
                 args.bpp,
                 args.resolution,
                 jpeg_quality_csv=args.jpeg_quality_csv,
+                compressed_dir=default_compressed_dir,
             )
         else:
             compressed_dir = default_compressed_dir

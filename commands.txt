@@ -63,3 +63,28 @@ python src/noisy_channel_runner.py \
   --jpeg_quality_csv results/compression_ratio_estimate/jpeg/dataset_DIV2K_valid_HR_512_jpeg_compression_params.csv \
   --seed 42 \
   --sample_images 0-5
+
+./py-sbatch.sh src/noisy_channel_runner.py \
+  --algorithm robust_turbo_ddcm \
+  --dataset DIV2K_valid_HR_512  \
+  --bpp 0.1 \
+  --num_trials 10 \
+  --seed 42 \
+  --sample_images 0-5
+
+
+python src/noisy_channel_runner.py \
+  --algorithm turbo_ddcm \
+  --dataset DIV2K_valid_HR_512  \
+  --bpp 0.1 \
+  --num_trials 10 \
+  --seed 42 \
+  --sample_images 0-5
+
+# Div2K parallel (ddcm): one BER per run_id (run on 6 GPUs; set CUDA_VISIBLE_DEVICES per process)
+./py-sbatch.sh src/noisy_channel_runner.py --algorithm ddcm --dataset DIV2K_valid_HR_512 --bpp 0.1 --ber 1e-6 --run_id 0 --num_trials 10 --seed 42 --sample_images 0-5
+./py-sbatch.sh src/noisy_channel_runner.py --algorithm ddcm --dataset DIV2K_valid_HR_512 --bpp 0.1 --ber 1e-5 --run_id 1 --num_trials 10 --seed 42 --sample_images 0-5
+./py-sbatch.sh src/noisy_channel_runner.py --algorithm ddcm --dataset DIV2K_valid_HR_512 --bpp 0.1 --ber 1e-4 --run_id 2 --num_trials 10 --seed 42 --sample_images 0-5
+./py-sbatch.sh src/noisy_channel_runner.py --algorithm ddcm --dataset DIV2K_valid_HR_512 --bpp 0.1 --ber 1e-3 --run_id 3 --num_trials 10 --seed 42 --sample_images 0-5
+./py-sbatch.sh src/noisy_channel_runner.py --algorithm ddcm --dataset DIV2K_valid_HR_512 --bpp 0.1 --ber 1e-2 --run_id 4 --num_trials 10 --seed 42 --sample_images 0-5
+./py-sbatch.shsrc/noisy_channel_runner.py --algorithm ddcm --dataset DIV2K_valid_HR_512 --bpp 0.1 --ber 1e-1 --run_id 5 --num_trials 10 --seed 42 --sample_images 0-5
