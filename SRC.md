@@ -152,20 +152,22 @@ Outputs go to `results/compression_ratio_estimate/{algorithm}/`.
 
 After each (BER, trial), patch FID is computed over all decompressed images. Temp dirs are cleaned up; only samples and CSVs are kept.
 
-**Output layout** (under `output_dir`, e.g. `results/noisy_channel/jpeg/`):
+**Output layout** (under `output_dir`, e.g. `results/noisy_channel/jpeg/dataset_Kodack24/` — one folder per dataset):
 
 ```
-output_dir/
+results/noisy_channel/{algorithm}/{dataset_name}/
 ├── noisy_channel_{algorithm}.csv   # Per-image metrics: image_file, ber, trial, num_bit_flips, bpp, psnr, niqe, lpips, error
 ├── fid_{algorithm}.csv            # Per-trial FID: ber, trial, fid
 ├── compressed/                    # Baseline compressed outputs (or precomputed via --compressed_dir)
-│   └── dataset_Kodack24_{algo}_bpp{bpp}/
+│   └── {dataset_name}_{algo}_bpp{bpp}/
 └── samples/
     ├── baseline/                  # Decompressed samples at BER=0 (no bit flips)
     │   └── {base}.png
     └── ber{ber}/                  # Samples at each BER (e.g. ber0.001)
         └── {base}_trial{trial}.png
 ```
+
+`dataset_name` is the basename of `--dataset` (e.g. `dataset_Kodack24`, `DIV2K_valid_HR_512`).
 
 The CSV has one row per (image, BER, trial). Baseline rows have `ber=0`, `trial=0`, `num_bit_flips=0`. Rows where decompression failed have `error` set and empty `psnr`/`niqe`/`lpips`.
 
@@ -207,16 +209,16 @@ python src/noisy_channel_runner.py --algorithm ddcm --dataset dataset_Kodack24 -
 | `--sample_images` | all | Indices to save samples, e.g. `0-5` or `0,2,5` |
 | `--compressed_dir` | — | Skip baseline; use this precomputed dir |
 
-Results: `results/noisy_channel/{algorithm}/` (CSV, samples, FID).
+Results: `results/noisy_channel/{algorithm}/{dataset_name}/` (CSV, samples, FID).
 
 ### 3. Analyze Results
 
 ```bash
 python src/analyze_noisy_channel_results.py \
-  --jpeg_csv results/noisy_channel/jpeg/noisy_channel_jpeg.csv \
-  --turbo_csv results/noisy_channel/turbo_ddcm/noisy_channel_turbo_ddcm.csv \
-  --turbo_improved_csv results/noisy_channel/robust_turbo_ddcm/noisy_channel_robust_turbo_ddcm.csv \
-  --ddcm_csv results/noisy_channel/ddcm/noisy_channel_ddcm.csv \
+  --jpeg_csv results/noisy_channel/jpeg/dataset_Kodack24/noisy_channel_jpeg.csv \
+  --turbo_csv results/noisy_channel/turbo_ddcm/dataset_Kodack24/noisy_channel_turbo_ddcm.csv \
+  --turbo_improved_csv results/noisy_channel/robust_turbo_ddcm/dataset_Kodack24/noisy_channel_robust_turbo_ddcm.csv \
+  --ddcm_csv results/noisy_channel/ddcm/dataset_Kodack24/noisy_channel_ddcm.csv \
   --output_dir results/plots
 ```
 

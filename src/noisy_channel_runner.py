@@ -441,7 +441,7 @@ def run_baseline(
     runner = _runner_factory(project_root, algorithm, quality_by_image=quality_by_image)
     dataset_name = os.path.basename(os.path.normpath(dataset_path))
     out_name = _output_dir_name(dataset_name, target_bpp, algorithm)
-    compressed_dir = os.path.join(project_root, "results", "noisy_channel", algorithm, "compressed", out_name)
+    compressed_dir = os.path.join(project_root, "results", "noisy_channel", algorithm, dataset_name, "compressed", out_name)
     has_content = os.path.isdir(compressed_dir) and any(
         f for f in os.listdir(compressed_dir) if not f.startswith(".")
     )
@@ -486,10 +486,11 @@ def main():
 
     project_root = os.path.dirname(_script_dir)
     dataset_path = os.path.abspath(args.dataset or os.path.join(project_root, "dataset"))
+    dataset_name = os.path.basename(os.path.normpath(dataset_path))
     image_files = get_images(dataset_path)
     sample_image_files = resolve_subset(image_files, parse_subset(args.sample_images)) if args.sample_images else None
     ber_values = list(args.ber)
-    output_dir = args.output_dir or os.path.join(project_root, "results", "noisy_channel", args.algorithm)
+    output_dir = args.output_dir or os.path.join(project_root, "results", "noisy_channel", args.algorithm, dataset_name)
     compressed_dir = args.compressed_dir
 
     import torch
@@ -502,8 +503,8 @@ def main():
 
     if not compressed_dir:
         default_compressed_dir = os.path.join(
-            project_root, "results", "noisy_channel", args.algorithm, "compressed",
-            _output_dir_name(os.path.basename(os.path.normpath(dataset_path)), args.bpp, args.algorithm),
+            project_root, "results", "noisy_channel", args.algorithm, dataset_name, "compressed",
+            _output_dir_name(dataset_name, args.bpp, args.algorithm),
         )
         need_baseline = not os.path.isdir(default_compressed_dir) or not any(
             f for f in os.listdir(default_compressed_dir) if not f.startswith(".")

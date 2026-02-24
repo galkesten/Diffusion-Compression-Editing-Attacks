@@ -14,6 +14,8 @@ python src/find_compression_params.py --algorithms jpeg  --bpp 1.0 --dataset DIV
 
 #experiment
 
+#Kodak
+
 python src/noisy_channel_runner.py \
   --algorithm jpeg \
   --dataset dataset_Kodack24 \
@@ -49,3 +51,15 @@ python src/noisy_channel_runner.py \
   --seed 42 \
   --sample_images 0-5
 
+
+
+#Div2K
+
+python src/noisy_channel_runner.py \
+  --algorithm jpeg \
+  --dataset DIV2K_valid_HR_512 \
+  --bpp 1.0 \
+  --num_trials 10 \
+  --jpeg_quality_csv results/compression_ratio_estimate/jpeg/dataset_DIV2K_valid_HR_512_jpeg_compression_params.csv \
+  --seed 42 \
+  --sample_images 0-5
