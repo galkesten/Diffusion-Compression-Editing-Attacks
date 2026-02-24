@@ -23,6 +23,7 @@ dependencies:
   - scikit-image
   - pandas
   - matplotlib
+  - jupyterlab
   - setuptools
   - pip
   # Pip-installed after env create (pip may pull in another Pillow; if PIL breaks, reinstall pillow from conda)

@@ -127,18 +127,18 @@ def _prepare_params_turbo(target_bpp: float, _dataset_path: str, _images_to_use:
     return {"params": {**p, "M": M}, "theoretical": theoretical, "M": M, "T": T, "K": K, "C": C}
 
 
-def _write_csv_jpeg(csv_path: str, target_bpp: float, params_info: Dict[str, Any], pairs: List[Tuple[str, float]], images_to_use: List[str], errors: Dict[str, str]) -> None:
+def _write_csv_jpeg(csv_path: str, target_bpp: float, params_info: Dict[str, Any], pairs: List[Tuple[str, float]], images_to_use: List[str], errors: Dict[str, str], dataset_name: str) -> None:
     quality_by_image = params_info["params"].get("quality_by_image", {})
     pair_dict = dict(pairs)
     for img_file in images_to_use:
         q = quality_by_image.get(img_file, "")
         actual = errors.get(img_file, "") if errors else pair_dict.get(img_file, 0.0)
-        append_csv_row(csv_path, [img_file, target_bpp, q, actual])
+        append_csv_row(csv_path, [dataset_name, img_file, target_bpp, q, actual])
 
 
-def _write_csv_combined(csv_path: str, target_bpp: float, params_info: Dict[str, Any], pairs: List[Tuple[str, float]], _images_to_use: List[str], errors: Dict[str, str]) -> None:
+def _write_csv_combined(csv_path: str, target_bpp: float, params_info: Dict[str, Any], pairs: List[Tuple[str, float]], _images_to_use: List[str], errors: Dict[str, str], dataset_name: str) -> None:
     avg_actual = avg_or_zero([bpp for _, bpp in pairs]) if not errors else 0.0
-    row = [target_bpp, params_info["M"], params_info["theoretical"], avg_actual, params_info["T"], params_info["K"], params_info["C"]]
+    row = [dataset_name, target_bpp, params_info["M"], params_info["theoretical"], avg_actual, params_info["T"], params_info["K"], params_info["C"]]
     append_csv_row(csv_path, row)
 
 
@@ -181,7 +181,7 @@ ALGO_CONFIG: Dict[str, AlgoConfigItem] = {
         path_for_compressed=lambda out_dir, base, _pi: os.path.join(out_dir, f"{base}_compressed.jpg"),
         csv_key="jpeg",
         csv_filename="jpeg_compression_params.csv",
-        csv_headers=["image_file", "target_bpp", "quality", "actual_bpp"],
+        csv_headers=["dataset", "image_file", "target_bpp", "quality", "actual_bpp"],
         write_csv_rows=_write_csv_jpeg,
     ),
     "ddcm": _make_config(
@@ -192,7 +192,7 @@ ALGO_CONFIG: Dict[str, AlgoConfigItem] = {
         path_for_compressed=lambda out_dir, base, pi: os.path.join(out_dir, pi["out_prefix"], f"{base}_noise_indices.bin"),
         csv_key="combined",
         csv_filename="ddcm_bpp.csv",
-        csv_headers=["target_bpp", "M", "theoretical_bpp", "actual_bpp", "T", "K", "C"],
+        csv_headers=["dataset", "target_bpp", "M", "theoretical_bpp", "actual_bpp", "T", "K", "C"],
         write_csv_rows=_write_csv_combined,
     ),
     "turbo_ddcm": _make_config(
@@ -203,7 +203,7 @@ ALGO_CONFIG: Dict[str, AlgoConfigItem] = {
         path_for_compressed=lambda out_dir, base, _pi: os.path.join(out_dir, f"{base}{turbo_utils.BIN_SUFFIX}"),
         csv_key="combined",
         csv_filename="turbo_ddcm_bpp.csv",
-        csv_headers=["target_bpp", "M", "theoretical_bpp", "actual_bpp", "T", "K", "C"],
+        csv_headers=["dataset", "target_bpp", "M", "theoretical_bpp", "actual_bpp", "T", "K", "C"],
         write_csv_rows=_write_csv_combined,
     ),
     "robust_turbo_ddcm": _make_config(
@@ -214,7 +214,7 @@ ALGO_CONFIG: Dict[str, AlgoConfigItem] = {
         path_for_compressed=lambda out_dir, base, _pi: os.path.join(out_dir, f"{base}{turbo_utils.BIN_SUFFIX}"),
         csv_key="combined",
         csv_filename="robust_turbo_ddcm_bpp.csv",
-        csv_headers=["target_bpp", "M", "theoretical_bpp", "actual_bpp", "T", "K", "C"],
+        csv_headers=["dataset", "target_bpp", "M", "theoretical_bpp", "actual_bpp", "T", "K", "C"],
         write_csv_rows=_write_csv_combined,
     ),
 }
@@ -265,16 +265,17 @@ def run_experiment(
         else:
             path_fn = lambda out_dir, base, pi=params_info: path_for_compressed(out_dir, base, pi)
             pairs = collect_actual_bpp_from_output(images_to_use, output_dir, img_height, img_width, path_fn)
-        write_csv_rows(csv_path, target_bpp, params_info, pairs, images_to_use, errors)
+        write_csv_rows(csv_path, target_bpp, params_info, pairs, images_to_use, errors, dataset_name)
 
         shutil.rmtree(staging_dir, ignore_errors=True)
 
 
-def init_csv_for_algorithm(project_root: str, algorithm: str) -> str:
+def init_csv_for_algorithm(project_root: str, algorithm: str, dataset_name: str) -> str:
     cfg = ALGO_CONFIG[algorithm]
     results_dir = os.path.join(project_root, "results", "compression_ratio_estimate", algorithm)
     os.makedirs(results_dir, exist_ok=True)
-    path = os.path.join(results_dir, cfg["csv_filename"])
+    csv_basename = f"dataset_{dataset_name}_{cfg['csv_filename']}"
+    path = os.path.join(results_dir, csv_basename)
     with open(path, "w", newline="") as f:
         csv.writer(f).writerow(cfg["csv_headers"])
     return path
@@ -292,6 +293,7 @@ def main() -> None:
 
     project_root = os.path.dirname(_script_dir)
     dataset_path = args.dataset or os.path.join(project_root, "dataset")
+    dataset_name = os.path.basename(os.path.normpath(dataset_path))
     algorithms_to_run = ALL_ALGOS if "all" in args.algorithms else args.algorithms
     all_images = get_images(dataset_path)
     subset = parse_subset(args.subset) if args.subset else None
@@ -299,7 +301,7 @@ def main() -> None:
     print(f"\n{'=' * 60}\nFinding compression parameters\nAlgorithms: {', '.join(algorithms_to_run)}\nTarget BPPs: {args.bpp}\nDataset: {dataset_path}\nResolution: {args.height}x{args.width}\nSubset: {args.subset or 'all'}\n{'=' * 60}\n")
 
     for algo in algorithms_to_run:
-        csv_path = init_csv_for_algorithm(project_root, algo)
+        csv_path = init_csv_for_algorithm(project_root, algo, dataset_name)
         print(f"Running {algo}...")
         run_experiment(algo, dataset_path, all_images, args.bpp, project_root, csv_path, args.height, args.width, subset)
         print(f"✓ {algo} done")

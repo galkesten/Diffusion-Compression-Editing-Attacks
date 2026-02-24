@@ -102,7 +102,7 @@ Finds algorithm parameters to achieve target BPP. Config-driven via `ALGO_CONFIG
 - **ddcm** — Search M given T, K, C
 - **turbo_ddcm** / **robust_turbo_ddcm** — Search M given T, K, C
 
-Writes CSVs under `results/compression_ratio_estimate/{algorithm}/` (e.g. `jpeg_compression_params.csv`, `ddcm_bpp.csv`).
+Writes CSVs under `results/compression_ratio_estimate/{algorithm}/` with dataset in the filename and a `dataset` column (e.g. `dataset_Kodak24_jpeg_compression_params.csv`, `dataset_Kodak24_ddcm_bpp.csv`).
 
 ### `noisy_channel_runner.py`
 
@@ -176,7 +176,7 @@ python src/noisy_channel_runner.py \
   --dataset dataset_Kodack24 \
   --bpp 1.0 \
   --num_trials 1 \
-  --jpeg_quality_csv results/compression_ratio_estimate/jpeg/jpeg_compression_params.csv \
+  --jpeg_quality_csv results/compression_ratio_estimate/jpeg/dataset_Kodak24_jpeg_compression_params.csv \
   --seed 42 \
   --sample_images 0-5
 

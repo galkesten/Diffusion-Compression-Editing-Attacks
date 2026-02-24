@@ -1,0 +1,2 @@
+dataset,target_bpp,M,theoretical_bpp,actual_bpp,T,K,C
+DIV2K_valid_HR_512,0.1,73,0.10025024,0.100250244140625,30,16384,1

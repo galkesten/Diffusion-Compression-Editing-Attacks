@@ -1,13 +1,16 @@
 #compression params 
 
 python src/find_compression_params.py --algorithms robust_turbo_ddcm  --bpp 0.1 --dataset dataset_Kodack24 --subset 0-4
+python src/find_compression_params.py --algorithms robust_turbo_ddcm  --bpp 0.1 --dataset DIV2K_valid_HR_512 --subset 0-4
 ./py-sbatch.sh src/find_compression_params.py --algorithms robust_turbo_ddcm  --bpp 0.1 --dataset dataset_Kodack24 --subset 0-4
 
 
 python src/find_compression_params.py --algorithms turbo_ddcm --bpp 0.1 --dataset dataset_Kodack24 --subset 0-4
+python src/find_compression_params.py --algorithms turbo_ddcm --bpp 0.1 --dataset DIV2K_valid_HR_512 --subset 0-4
 python src/find_compression_params.py --algorithms ddcm --bpp 0.1 --dataset dataset_Kodack24 --subset 0-4
+python src/find_compression_params.py --algorithms ddcm --bpp 0.1 --dataset DIV2K_valid_HR_512 --subset 0-4
 python src/find_compression_params.py --algorithms jpeg  --bpp 1.0 --dataset dataset_Kodack24
-
+python src/find_compression_params.py --algorithms jpeg  --bpp 1.0 --dataset DIV2K_valid_HR_512
 
 #experiment
 
@@ -15,18 +18,8 @@ python src/noisy_channel_runner.py \
   --algorithm jpeg \
   --dataset dataset_Kodack24 \
   --bpp 1.0 \
-  --num_trials 50 \
-  --jpeg_quality_csv results/compression_ratio_estimate/jpeg/jpeg_compression_params.csv \
-  --seed 42 \
-  --sample_images 0-5
-
-
-python src/noisy_channel_runner.py \
-  --algorithm jpeg \
-  --dataset dataset_Kodack24 \
-  --bpp 1.0 \
-  --num_trials 50 \
-  --jpeg_quality_csv results/compression_ratio_estimate/jpeg/jpeg_compression_params.csv \
+  --num_trials 10 \
+  --jpeg_quality_csv results/compression_ratio_estimate/jpeg/dataset_Kodak24_jpeg_compression_params.csv \
   --seed 42 \
   --sample_images 0-5
 
@@ -34,7 +27,7 @@ python src/noisy_channel_runner.py \
   --algorithm robust_turbo_ddcm \
   --dataset dataset_Kodack24 \
   --bpp 0.1 \
-  --num_trials 50 \
+  --num_trials 10 \
   --seed 42 \
   --sample_images 0-5
 
@@ -42,7 +35,7 @@ python src/noisy_channel_runner.py \
   --algorithm turbo_ddcm \
   --dataset dataset_Kodack24 \
   --bpp 0.1 \
-  --num_trials 50 \
+  --num_trials 10 \
   --seed 42 \
   --sample_images 0-5
 
@@ -52,7 +45,7 @@ python src/noisy_channel_runner.py \
   --algorithm ddcm \
   --dataset dataset_Kodack24 \
   --bpp 0.1 \
-  --num_trials 50 \
+  --num_trials 10 \
   --seed 42 \
   --sample_images 0-5
 
