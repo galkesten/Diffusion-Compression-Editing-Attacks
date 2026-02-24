@@ -27,13 +27,12 @@ def main(args):
         model_id = "CompVis/stable-diffusion-v1-4"
     else:
         resize_to = (512, 512)
-        model_id = "Manojb/stable-diffusion-2-1-base" #"stabilityai/stable-diffusion-2-1-base" # "Manojb/stable-diffusion-2-1-base"
+        model_id = "stabilityai/stable-diffusion-2-1-base" # "Manojb/stable-diffusion-2-1-base"
 
     if test_img.shape[2:3] != torch.Size(resize_to):
         print(f"images will be resized to {resize_to}")
 
-    turbo_ddcm = TurboDDCM(model_id, args.T, args.K, args.M, args.B, args.seed, args.float32, device_str,
-                           args.manual_list_ind)
+    turbo_ddcm = TurboDDCM(model_id, args.T, args.K, args.M, args.old_protocol, args.seed, args.float32, device_str)
     runtimes = []
     for file_name in tqdm(target_files):
         img = utils.load_image(os.path.join(args.input_dir, file_name), resize_to, device_str)
@@ -63,22 +62,21 @@ if __name__ == '__main__':
     parser.add_argument('--input_dir', type=str, required=True, help='Directory containing images to compress')
     parser.add_argument('--output_dir', type=str, required=True, help='Directory to save the results')
     parser.add_argument('--M', type=int, required=True, help='Atoms to be chosen from the codebook in each diffusion step')
-
+    
     # optional
     parser.add_argument('--gpu', type=int, default=0, help='GPU device index to use')
     parser.add_argument('--float32', action='store_true', help='Use float32 precision for model inference')
     parser.add_argument('--seed', type=int, default=88888888, help='Random seed')
     
-    parser.add_argument('--T', type=int, default=30, help='Compress using T diffusion steps')
+    parser.add_argument('--T', type=int, default=20, help='Compress using T diffusion steps')
     parser.add_argument('--K', type=int, default=16384, help="Codebook size")
-    parser.add_argument('--B', type=int, required=True, default=0, help='Atoms to be encoded in the old protocol')
 
     parser.add_argument('--weights_dir', type=str, default=None, help='Directory with priority maps')
 
     parser.add_argument('--save_reconstructions', action='store_true', default=False, help='Save reconstructions using the compression process')
     parser.add_argument('--save_runtimes', action='store_true', default=False, help='Save compression times in csv file')
 
-    parser.add_argument('--manual_list_ind', action='store_true', default=False)
+    parser.add_argument('--old_protocol', action='store_true', default=False)
     
     args = parser.parse_args()
 

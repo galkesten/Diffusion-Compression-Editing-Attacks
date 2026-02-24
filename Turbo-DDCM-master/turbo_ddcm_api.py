@@ -10,26 +10,26 @@ from turbo_ddcm.turbo_ddcm import TurboDDCM
 from turbo_ddcm import utils
 
 
-# Model cache: keyed by (model_id, T, K, M, old_protocol, seed, device_str, float32, manual_list_ind)
+# Model cache: keyed by (model_id, T, K, M, B, seed, device_str, float32, manual_list_ind)
 _model_cache = {}
 
 
-def _get_cached_model(model_id, T, K, M, old_protocol, seed, float32, device_str, manual_list_ind):
+def _get_cached_model(model_id, T, K, M, B, seed, float32, device_str, manual_list_ind):
     """Get or load cached model."""
     global _model_cache
     
-    cache_key = (model_id, T, K, M, old_protocol, seed, device_str, float32, manual_list_ind)
+    cache_key = (model_id, T, K, M, B, seed, device_str, float32, manual_list_ind)
     
     if cache_key not in _model_cache:
-        turbo_ddcm = TurboDDCM(model_id, T, K, M, old_protocol, seed, float32, device_str, manual_list_ind)
+        turbo_ddcm = TurboDDCM(model_id, T, K, M, B, seed, float32, device_str, manual_list_ind)
         _model_cache[cache_key] = turbo_ddcm
         print(f"Loaded Turbo-DDCM model: {cache_key}")
     
     return _model_cache[cache_key]
 
 
-def compress_main_programmatic(input_dir, output_dir, M, gpu=0, float32=False, seed=88888888,
-                               T=20, K=16384, weights_dir=None, save_reconstructions=False, save_runtimes=False, old_protocol=False, manual_list_ind=False):
+def compress_main_programmatic(input_dir, output_dir, M, B, gpu=0, float32=False, seed=88888888,
+                               T=30, K=16384, weights_dir=None, save_reconstructions=False, save_runtimes=False, old_protocol=False, manual_list_ind=False):
     device_str = f"cuda:{gpu}" if torch.cuda.is_available() else 'cpu'
     files = sorted(os.listdir(input_dir))
     target_files = [f for f in files if f.endswith('png')]
@@ -52,7 +52,7 @@ def compress_main_programmatic(input_dir, output_dir, M, gpu=0, float32=False, s
     if test_img.shape[2:3] != torch.Size(resize_to):
         print(f"images will be resized to {resize_to}")
 
-    turbo_ddcm = _get_cached_model(model_id, T, K, M, old_protocol, seed, float32, device_str, manual_list_ind)
+    turbo_ddcm = _get_cached_model(model_id, T, K, M, B, seed, float32, device_str, manual_list_ind)
     runtimes = []
     for file_name in tqdm(target_files):
         img = utils.load_image(os.path.join(input_dir, file_name), resize_to, device_str)
@@ -77,6 +77,7 @@ def compress_main_programmatic(input_dir, output_dir, M, gpu=0, float32=False, s
         'input_dir': input_dir,
         'output_dir': output_dir,
         'M': M,
+        'B' : B,
         'gpu': gpu,
         'float32': float32,
         'seed': seed,

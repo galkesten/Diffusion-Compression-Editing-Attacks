@@ -74,16 +74,15 @@ def clear_color(x):
     else:
         return x
 
-def turbo_ddcm_bpp(T, K, M, C, NBS, img_height, img_width):
+def turbo_ddcm_bpp(T, K, M, C, B, NBS, img_height, img_width):
+    combination_in_new_protocol = math.ceil(math.log2(math.comb(K, M - B)))
+    combination_in_old_protocol = B * math.ceil(math.log2(K))
+
     # (T - 1) since there is no noise addition on last step
-    bits = (T - NBS - 1) * (math.ceil(math.log2(math.comb(K, M))) + M * C)
+    bits = (T - NBS - 1) * ( (combination_in_new_protocol + combination_in_old_protocol) + M * C)
     bpp = bits / (img_height * img_width)
     return round(bpp, 8)
 
-def turbo_ddcm_bpp_old(T, K, M, C, NBS, img_height, img_width):
-    bits_per_iteration = M * (math.ceil(math.log2(K)) + C)
-    bits = (T - NBS - 1) * bits_per_iteration
-    return round(bits / (img_height * img_width), 8)
 
 def save_decoded_img(filename, w_dec):
     os.makedirs(os.path.dirname(filename), exist_ok=True)

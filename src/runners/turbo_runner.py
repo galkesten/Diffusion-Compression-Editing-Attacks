@@ -21,10 +21,10 @@ DEFAULT_TURBO_PARAMS: Dict[str, Any] = {
 DEFAULT_ROBUST_TURBO_PARAMS: Dict[str, Any] = {
     "T": 30,
     "K": 16384,
-    "M": 73,
+    "M": 80,
+    "B" : 10,
     "C": 1,
     "seed": 88888888,
-    "old_protocol": True,
     "manual_list_ind": True,
 }
 
@@ -52,6 +52,7 @@ class TurboModelRunner(BaseModelRunner):
         else:
             default = DEFAULT_ROBUST_TURBO_PARAMS if robust else DEFAULT_TURBO_PARAMS
             self.model_params = dict(default)
+        print(self.model_params)
         self.name = "robust_turbo_ddcm" if self.model_params.get("old_protocol", False) else "turbo_ddcm"
 
     def get_model_params(self) -> Dict[str, Any]:
@@ -76,7 +77,7 @@ class TurboModelRunner(BaseModelRunner):
 
     def _resolve_params(self, runtime_params: Dict[str, Any]) -> Dict[str, Any]:
         params = {**self.model_params, **runtime_params}
-        required = ["T", "K", "M"]
+        required = ["T", "K", "M", "B"]
         missing = [k for k in required if k not in params]
         if missing:
             raise ValueError(f"Missing Turbo params: {missing}")
@@ -119,6 +120,7 @@ class TurboModelRunner(BaseModelRunner):
                 seed=int(resolved_params.get("seed", 88888888)),
                 T=int(resolved_params["T"]),
                 K=int(resolved_params["K"]),
+                B=int(resolved_params["B"]),
                 weights_dir=None,
                 save_reconstructions=False,
                 save_runtimes=False,

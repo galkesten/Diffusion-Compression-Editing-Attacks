@@ -436,7 +436,6 @@ def run_baseline(
     DDCM/Turbo: use runner default params. JPEG: quality per image from jpeg_quality_csv (required).
     """
     from experiment_utils import prepare_input_dir
-
     quality_by_image = load_jpeg_quality_csv(jpeg_quality_csv, target_bpp) if algorithm == "jpeg" and jpeg_quality_csv and os.path.isfile(jpeg_quality_csv) else None
     runner = _runner_factory(project_root, algorithm, quality_by_image=quality_by_image)
     dataset_name = os.path.basename(os.path.normpath(dataset_path))

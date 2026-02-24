@@ -5,11 +5,11 @@ from turbo_ddcm.ddpm import DDPM
 import turbo_ddcm.utils as utils
 from turbo_ddcm.bit_stream_lex_enc import BitStreamEncoder
 
-class TurboDDCM():
+class TurboDDCM:
     s_encoding_eta = 1
     s_denoising_eta = 0
 
-    def __init__(self, model_id, T, K, M, old_protocol_ind, seed=42, float32=False, device='cuda', manual_list_ind=False):
+    def __init__(self, model_id, T, K, M, B, seed=42, float32=False, device='cuda', manual_list_ind=False):
         self.device = 'cuda'
         self.seed = seed
         self.torch_dtype = torch.float32 if float32 else torch.float16
@@ -39,9 +39,12 @@ class TurboDDCM():
         self.K = K
         self.M = M
         self.C = 1 # as described in the paper - we use C=1
-        self.no_bits_steps = TurboDDCM.get_no_bits_steps(self.T, self.K, self.M, self.C, self.H, self.W, old_protocol_ind, manual_list_ind) # NBS
+        assert self.M >= B
+        self.B = B
+        self.no_bits_steps = TurboDDCM.get_no_bits_steps(self.T, self.K, self.M, self.C, self.H, self.W, self.B,
+                                                         manual_list_ind) # NBS
 
-        self.bit_stream_obj = BitStreamEncoder(self.K, self.M, self.C, old_protocol_ind)
+        self.bit_stream_obj = BitStreamEncoder(self.K, self.M, self.C, B)
 
     def compress(self, image, weight_pixel_vector):
         assert image.shape == torch.Size([1, 3, self.H, self.W])
@@ -128,8 +131,17 @@ class TurboDDCM():
 
         inner_products_with_residual = (codebook.T @ flat_residual).view(-1)
         abs_inner_products_with_residual = inner_products_with_residual.abs()
-        _, top_s_indices = torch.topk(abs_inner_products_with_residual, self.M)  # Shape: s
 
+        import pandas as pd
+        import os
+
+        tmp = abs_inner_products_with_residual.sort().view(-1)
+        df = pd.DataFrame({'index': range(self.K), 'value': tmp.cpu().numpy()})
+        file_path = "sorted_tensor.csv"
+        file_exists = os.path.isfile(file_path)
+        df.to_csv(file_path, mode='a' if file_exists else 'w', header=not file_exists, index=False)
+
+        _, top_s_indices = torch.topk(abs_inner_products_with_residual, self.M)  # Shape: s
         x[top_s_indices] = torch.sign(inner_products_with_residual[top_s_indices])
         coeffs_indices = (x[top_s_indices] > 0).long() # -1 to 0, 1 to 1
 
@@ -183,36 +195,19 @@ class TurboDDCM():
 
 
     @staticmethod
-    def get_no_bits_steps(T, K, M, C, H, W, old_protocol_ind, manual_list_ind):
-        if old_protocol_ind:
-            bpp = utils.turbo_ddcm_bpp_old(T, K, M, C, NBS=0, img_height=H, img_width=W) # assuming NBS is 0
-        else:
-            bpp = utils.turbo_ddcm_bpp(T, K, M, C, NBS=0, img_height=H, img_width=W) # assuming NBS is 0
+    def get_no_bits_steps(T, K, M, C, H, W, B, manual_list_ind):
+        bpp = utils.turbo_ddcm_bpp(T, K, M, C, B, NBS=0, img_height=H, img_width=W)
 
-        if manual_list_ind:
-            assert T == 30
-            steps = 70 # hyperparam
-            bins = torch.logspace(
-                start=torch.log10(torch.tensor(0.01)), end=torch.log10(torch.tensor(0.15)), steps=steps
-            )
+        assert T == 30
+        steps = 70 # hyperparam
+        bins = torch.logspace(
+            start=torch.log10(torch.tensor(0.01)), end=torch.log10(torch.tensor(0.15)), steps=steps
+        )
 
-            nbs = torch.max(torch.tensor(0),
-                            torch.min(torch.tensor(T - 2),
-                            # NBS <= T - 2 (we have to do one step with bits and we have one DDIM step
-                            # either way at the end of the DDPM process).
-                            steps - torch.bucketize(bpp, bins) - 1)).item()
-        else:
-            if bpp < 0.016:
-                nbs = 5
-            elif bpp < 0.025:
-                nbs = 4
-            elif bpp < 0.043:
-                nbs = 3
-            elif bpp < 0.062:
-                nbs = 2
-            elif bpp < 0.086:
-                nbs = 1
-            else:
-                nbs = 0
+        nbs = torch.max(torch.tensor(0),
+                        torch.min(torch.tensor(T - 2),
+                        # NBS <= T - 2 (we have to do one step with bits and we have one DDIM step
+                        # either way at the end of the DDPM process).
+                        steps - torch.bucketize(bpp, bins) - 1)).item()
 
         return nbs

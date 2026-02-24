@@ -1,0 +1,19 @@
+{
+    "input_dir": "./../dataset_Kodak24/",
+    "output_compression_dir": "./compress",
+    "output_decompression_dir": "./decompress",
+    "M": 100,
+    "gpu": 0,
+    "float32": false,
+    "seed": 88888888,
+    "T": 30,
+    "K": 16384,
+    "B": 20,
+    "weights_dir": null,
+    "save_reconstructions": false,
+    "save_runtimes": true,
+    "old_protocol": false,
+    "manual_list_ind": false,
+    "output_dir": "./compress",
+    "model_id": "Manojb/stable-diffusion-2-1-base"
+}
