@@ -61,23 +61,19 @@ def find_jpeg_quality_for_bpp(img, target_bpp, resize_to=(512, 512)):
     return best_quality, best_bpp
 
 
-def _turbo_bpp_with_manual_list_ind(T, K, M, C, img_height, img_width, bpp_fn):
-    bpp = bpp_fn(T, K, M, C, 0, img_height, img_width)
+def _turbo_bpp_with_manual_list_ind(T, K, M, C, B, img_height, img_width):
+    bpp = turbo_utils.turbo_ddcm_bpp(T, K, M, C, B, 0, img_height, img_width)
     bins = torch.logspace(start=torch.log10(torch.tensor(0.01)), end=torch.log10(torch.tensor(0.15)), steps=70)
     nbs = torch.max(torch.tensor(0), torch.min(torch.tensor(T - 2), 70 - torch.bucketize(torch.tensor(bpp), bins) - 1)).item()
-    return bpp_fn(T, K, M, C, nbs, img_height, img_width)
+    return turbo_utils.turbo_ddcm_bpp(T, K, M, C, B, nbs, img_height, img_width)
 
 
 def ddcm_bpp(T, K, M, C, img_height, img_width, optimized_Ts):
     return (optimized_Ts - 1) * (M * np.log2(K) + (M - 1) * C) / (img_height * img_width)
 
 
-def find_turbo_ddcm_M_for_bpp(target_bpp, T, K, C, img_height, img_width):
-    return binary_search_best_int(target_bpp, 1, min(K, 10000), lambda m: _turbo_bpp_with_manual_list_ind(T, K, m, C, img_height, img_width, turbo_utils.turbo_ddcm_bpp))
-
-
-def find_robust_turbo_ddcm_M_for_bpp(target_bpp, T, K, C, img_height, img_width):
-    return binary_search_best_int(target_bpp, 1, min(K, 10000), lambda m: _turbo_bpp_with_manual_list_ind(T, K, m, C, img_height, img_width, turbo_utils.turbo_ddcm_bpp_old))
+def find_turbo_ddcm_M_for_bpp(target_bpp, T, K, C, B, img_height, img_width):
+    return binary_search_best_int(target_bpp, 1, min(K, 10000), lambda m: _turbo_bpp_with_manual_list_ind(T, K, m, C, B, img_height, img_width))
 
 
 def find_ddcm_M_for_bpp(target_bpp, T, K, C, img_height, img_width):
@@ -113,18 +109,17 @@ def _prepare_params_ddcm(target_bpp: float, _dataset_path: str, _images_to_use: 
     t0, t1 = T - 1, 0
     model_name = model_id.split("/")[1] if "/" in model_id else model_id
     out_prefix = f"T={T}_in{t0}-{t1}_K={K}_M={M}_C={C}_model={model_name}"
-    return {"params": {"T": T, "K": K, "M": M, "C": C, "model_id": model_id}, "out_prefix": out_prefix, "theoretical": theoretical, "M": M, "T": T, "K": K, "C": C}
+    return {"params": {"T": T, "K": K, "M": M, "C": C, "model_id": model_id}, "out_prefix": out_prefix, "theoretical": theoretical}
 
 
 def _prepare_params_turbo(target_bpp: float, _dataset_path: str, _images_to_use: List[str], img_height: int, img_width: int, _resize_to: Tuple[int, int], params: Dict[str, Any]) -> Dict[str, Any]:
     p = params
     T, K, C = int(p["T"]), int(p["K"]), int(p["C"])
-    find_m = find_robust_turbo_ddcm_M_for_bpp if p.get("old_protocol") else find_turbo_ddcm_M_for_bpp
-    bpp_fn = turbo_utils.turbo_ddcm_bpp_old if p.get("old_protocol") else turbo_utils.turbo_ddcm_bpp
-    M = find_m(target_bpp, T, K, C, img_height, img_width)
+    B = int(p["B"])  # Required. turbo_ddcm: 0, robust_turbo_ddcm: 10 (from ALGO_CONFIG)
+    M = find_turbo_ddcm_M_for_bpp(target_bpp, T, K, C, B, img_height, img_width)
     print(f"M: {M}")
-    theoretical = _turbo_bpp_with_manual_list_ind(T, K, M, C, img_height, img_width, bpp_fn)
-    return {"params": {**p, "M": M}, "theoretical": theoretical, "M": M, "T": T, "K": K, "C": C}
+    theoretical = _turbo_bpp_with_manual_list_ind(T, K, M, C, B, img_height, img_width)
+    return {"params": {**p, "M": M}, "theoretical": theoretical}
 
 
 def _write_csv_jpeg(csv_path: str, target_bpp: float, params_info: Dict[str, Any], pairs: List[Tuple[str, float]], images_to_use: List[str], errors: Dict[str, str], dataset_name: str) -> None:
@@ -138,7 +133,10 @@ def _write_csv_jpeg(csv_path: str, target_bpp: float, params_info: Dict[str, Any
 
 def _write_csv_combined(csv_path: str, target_bpp: float, params_info: Dict[str, Any], pairs: List[Tuple[str, float]], _images_to_use: List[str], errors: Dict[str, str], dataset_name: str) -> None:
     avg_actual = avg_or_zero([bpp for _, bpp in pairs]) if not errors else 0.0
-    row = [dataset_name, target_bpp, params_info["M"], params_info["theoretical"], avg_actual, params_info["T"], params_info["K"], params_info["C"]]
+    p = params_info["params"]
+    row = [dataset_name, target_bpp, p["M"], params_info["theoretical"], avg_actual, p["T"], p["K"], p["C"]]
+    if "B" in p:
+        row.append(p["B"])
     append_csv_row(csv_path, row)
 
 
@@ -196,25 +194,25 @@ ALGO_CONFIG: Dict[str, AlgoConfigItem] = {
         write_csv_rows=_write_csv_combined,
     ),
     "turbo_ddcm": _make_config(
-        params={"T": 30, "K": 16384, "C": 1, "seed": 88888888, "old_protocol": False, "manual_list_ind": True},
+        params={"T": 30, "K": 16384, "C": 1, "B": 0, "seed": 88888888, "manual_list_ind": True},
         runner_factory=lambda root, params_info=None: TurboModelRunner(root, robust=False, model_params=params_info["params"] if params_info else None),
         prepare_params=_prepare_params_turbo,
         output_dir_name=lambda dataset_name, target_bpp, algo: f"{dataset_name}_{algo}_bpp{target_bpp}_compressed",
         path_for_compressed=lambda out_dir, base, _pi: os.path.join(out_dir, f"{base}{turbo_utils.BIN_SUFFIX}"),
         csv_key="combined",
         csv_filename="turbo_ddcm_bpp.csv",
-        csv_headers=["dataset", "target_bpp", "M", "theoretical_bpp", "actual_bpp", "T", "K", "C"],
+        csv_headers=["dataset", "target_bpp", "M", "theoretical_bpp", "actual_bpp", "T", "K", "C", "B"],
         write_csv_rows=_write_csv_combined,
     ),
     "robust_turbo_ddcm": _make_config(
-        params={"T": 30, "K": 16384, "C": 1, "seed": 88888888, "old_protocol": True, "manual_list_ind": True},
+        params={"T": 30, "K": 16384, "C": 1, "B": 10, "seed": 88888888, "manual_list_ind": True},
         runner_factory=lambda root, params_info=None: TurboModelRunner(root, robust=True, model_params=params_info["params"] if params_info else None),
         prepare_params=_prepare_params_turbo,
         output_dir_name=lambda dataset_name, target_bpp, algo: f"{dataset_name}_{algo}_bpp{target_bpp}_compressed",
         path_for_compressed=lambda out_dir, base, _pi: os.path.join(out_dir, f"{base}{turbo_utils.BIN_SUFFIX}"),
         csv_key="combined",
         csv_filename="robust_turbo_ddcm_bpp.csv",
-        csv_headers=["dataset", "target_bpp", "M", "theoretical_bpp", "actual_bpp", "T", "K", "C"],
+        csv_headers=["dataset", "target_bpp", "M", "theoretical_bpp", "actual_bpp", "T", "K", "C", "B"],
         write_csv_rows=_write_csv_combined,
     ),
 }

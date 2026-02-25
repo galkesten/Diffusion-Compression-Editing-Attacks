@@ -11,18 +11,18 @@ DEFAULT_TURBO_PARAMS: Dict[str, Any] = {
     "T": 30,
     "K": 16384,
     "M": 114,
+    "B": 0,
     "C": 1,
     "seed": 88888888,
-    "old_protocol": False,
     "manual_list_ind": True,
 }
 
-# Default params when robust=True (robust / old protocol)
+# Default params when robust=True (robust turbo with B>0)
 DEFAULT_ROBUST_TURBO_PARAMS: Dict[str, Any] = {
     "T": 30,
     "K": 16384,
     "M": 80,
-    "B" : 10,
+    "B": 10,
     "C": 1,
     "seed": 88888888,
     "manual_list_ind": True,
@@ -42,18 +42,13 @@ class TurboModelRunner(BaseModelRunner):
         self.project_root = project_root
         self.turbo_root = os.path.join(project_root, "Turbo-DDCM-master")
         mp = model_params if model_params else None
-        if mp is not None and "old_protocol" in mp and bool(mp["old_protocol"]) != bool(robust):
-            raise ValueError(
-                "robust and model_params['old_protocol'] conflict: "
-                f"robust={robust!r} vs model_params['old_protocol']={mp['old_protocol']!r}"
-            )
         if mp is not None:
             self.model_params = dict(mp)
         else:
             default = DEFAULT_ROBUST_TURBO_PARAMS if robust else DEFAULT_TURBO_PARAMS
             self.model_params = dict(default)
         print(self.model_params)
-        self.name = "robust_turbo_ddcm" if self.model_params.get("old_protocol", False) else "turbo_ddcm"
+        self.name = "robust_turbo_ddcm" if robust else "turbo_ddcm"
 
     def get_model_params(self) -> Dict[str, Any]:
         return dict(self.model_params)
@@ -124,7 +119,6 @@ class TurboModelRunner(BaseModelRunner):
                 weights_dir=None,
                 save_reconstructions=False,
                 save_runtimes=False,
-                old_protocol=bool(resolved_params.get("old_protocol", False)),
                 manual_list_ind=bool(resolved_params.get("manual_list_ind", True)),
             )
             for image_file in image_files:

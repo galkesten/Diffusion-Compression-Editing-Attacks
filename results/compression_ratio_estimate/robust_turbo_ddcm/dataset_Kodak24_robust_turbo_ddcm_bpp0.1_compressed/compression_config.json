@@ -1,0 +1,16 @@
+{
+    "input_dir": "/home/galkesten/Diffusion-Compression-Editing-Attacks/results/compression_ratio_estimate/robust_turbo_ddcm/dataset_Kodak24_robust_turbo_ddcm_bpp0.1_compressed/temp_input",
+    "output_dir": "/home/galkesten/Diffusion-Compression-Editing-Attacks/results/compression_ratio_estimate/robust_turbo_ddcm/dataset_Kodak24_robust_turbo_ddcm_bpp0.1_compressed",
+    "M": 106,
+    "B": 10,
+    "gpu": 0,
+    "float32": false,
+    "seed": 88888888,
+    "T": 30,
+    "K": 16384,
+    "weights_dir": null,
+    "save_reconstructions": false,
+    "save_runtimes": false,
+    "model_id": "Manojb/stable-diffusion-2-1-base",
+    "manual_list_ind": true
+}

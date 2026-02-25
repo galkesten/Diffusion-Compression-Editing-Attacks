@@ -135,7 +135,7 @@ class TurboDDCM:
         import pandas as pd
         import os
 
-        tmp = abs_inner_products_with_residual.sort().view(-1)
+        tmp = abs_inner_products_with_residual.sort()[0].view(-1)
         df = pd.DataFrame({'index': range(self.K), 'value': tmp.cpu().numpy()})
         file_path = "sorted_tensor.csv"
         file_exists = os.path.isfile(file_path)

@@ -129,13 +129,13 @@ Run for one or more algorithms and target BPPs:
 
 ```bash
 # JPEG: find quality per image for BPP 1.0
-python src/find_compression_params.py --algorithms jpeg --bpp 1.0 --dataset dataset_Kodack24
+python src/find_compression_params.py --algorithms jpeg --bpp 1.0 --dataset dataset_Kodak24
 
 # DDCM / Turbo: find M for BPP 0.1 (subset 0-4 for quick test)
-python src/find_compression_params.py --algorithms robust_turbo_ddcm ddcm --bpp 0.1 --dataset dataset_Kodack24 --subset 0-4
+python src/find_compression_params.py --algorithms robust_turbo_ddcm ddcm --bpp 0.1 --dataset dataset_Kodak24 --subset 0-4
 
 # All algorithms, all default BPPs
-python src/find_compression_params.py --algorithms all --dataset dataset_Kodack24
+python src/find_compression_params.py --algorithms all --dataset dataset_Kodak24
 ```
 
 Outputs go to `results/compression_ratio_estimate/{algorithm}/`.
@@ -152,7 +152,7 @@ Outputs go to `results/compression_ratio_estimate/{algorithm}/`.
 
 After each (BER, trial), patch FID is computed over all decompressed images. Temp dirs are cleaned up; only samples and CSVs are kept.
 
-**Output layout** (under `output_dir`, e.g. `results/noisy_channel/jpeg/dataset_Kodack24/` — one folder per dataset):
+**Output layout** (under `output_dir`, e.g. `results/noisy_channel/jpeg/dataset_Kodak24/` — one folder per dataset):
 
 ```
 results/noisy_channel/{algorithm}/{dataset_name}/
@@ -167,7 +167,7 @@ results/noisy_channel/{algorithm}/{dataset_name}/
         └── {base}_trial{trial}.png
 ```
 
-`dataset_name` is the basename of `--dataset` (e.g. `dataset_Kodack24`, `DIV2K_valid_HR_512`).
+`dataset_name` is the basename of `--dataset` (e.g. `dataset_Kodak24`, `DIV2K_valid_HR_512`).
 
 The CSV has one row per (image, BER, trial). Baseline rows have `ber=0`, `trial=0`, `num_bit_flips=0`. Rows where decompression failed have `error` set and empty `psnr`/`niqe`/`lpips`.
 
@@ -175,7 +175,7 @@ The CSV has one row per (image, BER, trial). Baseline rows have `ber=0`, `trial=
 # JPEG (requires jpeg_quality_csv from step 1)
 python src/noisy_channel_runner.py \
   --algorithm jpeg \
-  --dataset dataset_Kodack24 \
+  --dataset dataset_Kodak24 \
   --bpp 1.0 \
   --num_trials 1 \
   --jpeg_quality_csv results/compression_ratio_estimate/jpeg/dataset_Kodak24_jpeg_compression_params.csv \
@@ -185,14 +185,14 @@ python src/noisy_channel_runner.py \
 # Turbo-DDCM / Robust Turbo-DDCM
 python src/noisy_channel_runner.py \
   --algorithm robust_turbo_ddcm \
-  --dataset dataset_Kodack24 \
+  --dataset dataset_Kodak24 \
   --bpp 0.1 \
   --num_trials 50 \
   --ber 1e-6 1e-5 1e-4 1e-3 1e-2 1e-1 \
   --seed 42
 
 # DDCM
-python src/noisy_channel_runner.py --algorithm ddcm --dataset dataset_Kodack24 --bpp 0.1 --num_trials 50
+python src/noisy_channel_runner.py --algorithm ddcm --dataset dataset_Kodak24 --bpp 0.1 --num_trials 50
 ```
 
 **Options:**
@@ -215,10 +215,10 @@ Results: `results/noisy_channel/{algorithm}/{dataset_name}/` (CSV, samples, FID)
 
 ```bash
 python src/analyze_noisy_channel_results.py \
-  --jpeg_csv results/noisy_channel/jpeg/dataset_Kodack24/noisy_channel_jpeg.csv \
-  --turbo_csv results/noisy_channel/turbo_ddcm/dataset_Kodack24/noisy_channel_turbo_ddcm.csv \
-  --turbo_improved_csv results/noisy_channel/robust_turbo_ddcm/dataset_Kodack24/noisy_channel_robust_turbo_ddcm.csv \
-  --ddcm_csv results/noisy_channel/ddcm/dataset_Kodack24/noisy_channel_ddcm.csv \
+  --jpeg_csv results/noisy_channel/jpeg/dataset_Kodak24/noisy_channel_jpeg.csv \
+  --turbo_csv results/noisy_channel/turbo_ddcm/dataset_Kodak24/noisy_channel_turbo_ddcm.csv \
+  --turbo_improved_csv results/noisy_channel/robust_turbo_ddcm/dataset_Kodak24/noisy_channel_robust_turbo_ddcm.csv \
+  --ddcm_csv results/noisy_channel/ddcm/dataset_Kodak24/noisy_channel_ddcm.csv \
   --output_dir results/plots
 ```
 

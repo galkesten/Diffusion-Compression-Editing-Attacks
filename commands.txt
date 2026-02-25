@@ -1,15 +1,13 @@
 #compression params 
 
-python src/find_compression_params.py --algorithms robust_turbo_ddcm  --bpp 0.1 --dataset dataset_Kodack24 --subset 0-4
+python src/find_compression_params.py --algorithms robust_turbo_ddcm  --bpp 0.1 --dataset dataset_Kodak24 --subset 0-4
 python src/find_compression_params.py --algorithms robust_turbo_ddcm  --bpp 0.1 --dataset DIV2K_valid_HR_512 --subset 0-4
-./py-sbatch.sh src/find_compression_params.py --algorithms robust_turbo_ddcm  --bpp 0.1 --dataset dataset_Kodack24 --subset 0-4
 
-
-python src/find_compression_params.py --algorithms turbo_ddcm --bpp 0.1 --dataset dataset_Kodack24 --subset 0-4
+python src/find_compression_params.py --algorithms turbo_ddcm --bpp 0.1 --dataset dataset_Kodak24 --subset 0-4
 python src/find_compression_params.py --algorithms turbo_ddcm --bpp 0.1 --dataset DIV2K_valid_HR_512 --subset 0-4
-python src/find_compression_params.py --algorithms ddcm --bpp 0.1 --dataset dataset_Kodack24 --subset 0-4
+python src/find_compression_params.py --algorithms ddcm --bpp 0.1 --dataset dataset_Kodak24 --subset 0-4
 python src/find_compression_params.py --algorithms ddcm --bpp 0.1 --dataset DIV2K_valid_HR_512 --subset 0-4
-python src/find_compression_params.py --algorithms jpeg  --bpp 1.0 --dataset dataset_Kodack24
+python src/find_compression_params.py --algorithms jpeg  --bpp 1.0 --dataset dataset_Kodak24
 python src/find_compression_params.py --algorithms jpeg  --bpp 1.0 --dataset DIV2K_valid_HR_512
 
 #experiment
@@ -27,7 +25,7 @@ python src/noisy_channel_runner.py \
 
 python src/noisy_channel_runner.py \
   --algorithm robust_turbo_ddcm \
-  --dataset dataset_Kodack24 \
+  --dataset dataset_Kodak24 \
   --bpp 0.1 \
   --num_trials 10 \
   --seed 42 \
@@ -35,7 +33,7 @@ python src/noisy_channel_runner.py \
 
 python src/noisy_channel_runner.py \
   --algorithm turbo_ddcm \
-  --dataset dataset_Kodack24 \
+  --dataset dataset_Kodak24 \
   --bpp 0.1 \
   --num_trials 10 \
   --seed 42 \
@@ -45,7 +43,7 @@ python src/noisy_channel_runner.py \
 
 python src/noisy_channel_runner.py \
   --algorithm ddcm \
-  --dataset dataset_Kodack24 \
+  --dataset dataset_Kodak24 \
   --bpp 0.1 \
   --num_trials 10 \
   --seed 42 \
@@ -88,3 +86,15 @@ python src/noisy_channel_runner.py \
 ./py-sbatch.sh src/noisy_channel_runner.py --algorithm ddcm --dataset DIV2K_valid_HR_512 --bpp 0.1 --ber 1e-3 --run_id 3 --num_trials 10 --seed 42 --sample_images 0-5
 ./py-sbatch.sh src/noisy_channel_runner.py --algorithm ddcm --dataset DIV2K_valid_HR_512 --bpp 0.1 --ber 1e-2 --run_id 4 --num_trials 10 --seed 42 --sample_images 0-5
 ./py-sbatch.shsrc/noisy_channel_runner.py --algorithm ddcm --dataset DIV2K_valid_HR_512 --bpp 0.1 --ber 1e-1 --run_id 5 --num_trials 10 --seed 42 --sample_images 0-5
+
+
+
+
+python src/noisy_channel_runner.py \
+  --algorithm robust_turbo_ddcm \
+  --dataset dataset_Kodak24 \
+  --bpp 0.1 \
+  --num_trials 10 \
+  --seed 42 \
+  --sample_images 0-5 \
+  --output_dir results2

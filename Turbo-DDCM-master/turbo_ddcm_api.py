@@ -29,7 +29,7 @@ def _get_cached_model(model_id, T, K, M, B, seed, float32, device_str, manual_li
 
 
 def compress_main_programmatic(input_dir, output_dir, M, B, gpu=0, float32=False, seed=88888888,
-                               T=30, K=16384, weights_dir=None, save_reconstructions=False, save_runtimes=False, old_protocol=False, manual_list_ind=False):
+                               T=30, K=16384, weights_dir=None, save_reconstructions=False, save_runtimes=False, manual_list_ind=False):
     device_str = f"cuda:{gpu}" if torch.cuda.is_available() else 'cpu'
     files = sorted(os.listdir(input_dir))
     target_files = [f for f in files if f.endswith('png')]
@@ -77,7 +77,7 @@ def compress_main_programmatic(input_dir, output_dir, M, B, gpu=0, float32=False
         'input_dir': input_dir,
         'output_dir': output_dir,
         'M': M,
-        'B' : B,
+        'B': B,
         'gpu': gpu,
         'float32': float32,
         'seed': seed,
@@ -87,7 +87,6 @@ def compress_main_programmatic(input_dir, output_dir, M, B, gpu=0, float32=False
         'save_reconstructions': save_reconstructions,
         'save_runtimes': save_runtimes,
         'model_id': model_id,
-        'old_protocol': old_protocol,
         'manual_list_ind': manual_list_ind
     }
     with open(os.path.join(output_dir, 'compression_config.json'), 'w') as f:
@@ -105,14 +104,14 @@ def decompress_main_programmatic(input_dir, output_dir, gpu=0, save_runtimes=Fal
     with open(os.path.join(input_dir, 'compression_config.json'), 'r') as f:
         compression_config = json.load(f)
     compression_config = Namespace(**compression_config)
-    
-    # Handle old configs that may not have old_protocol flag
-    old_protocol = getattr(compression_config, 'old_protocol', False)
     # Handle old configs that may not have manual_list_ind flag
     manual_list_ind_from_config = getattr(compression_config, 'manual_list_ind', manual_list_ind)
-    
-    turbo_ddcm = _get_cached_model(compression_config.model_id, compression_config.T, compression_config.K, 
-                                   compression_config.M, old_protocol, compression_config.seed, compression_config.float32, device_str, manual_list_ind_from_config)
+    if not hasattr(compression_config, 'B'):
+        raise ValueError("compression_config.json missing required field 'B'. Re-run compression with updated API.")
+    B = compression_config.B
+
+    turbo_ddcm = _get_cached_model(compression_config.model_id, compression_config.T, compression_config.K,
+                                   compression_config.M, B, compression_config.seed, compression_config.float32, device_str, manual_list_ind_from_config)
     runtimes = []
     for file_name in tqdm(target_files):
         encoding = utils.load_binary(os.path.join(input_dir, file_name))

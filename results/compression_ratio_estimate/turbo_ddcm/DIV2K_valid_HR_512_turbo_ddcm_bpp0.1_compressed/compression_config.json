@@ -2,6 +2,7 @@
     "input_dir": "/home/galkesten/Diffusion-Compression-Editing-Attacks/results/compression_ratio_estimate/turbo_ddcm/DIV2K_valid_HR_512_turbo_ddcm_bpp0.1_compressed/temp_input",
     "output_dir": "/home/galkesten/Diffusion-Compression-Editing-Attacks/results/compression_ratio_estimate/turbo_ddcm/DIV2K_valid_HR_512_turbo_ddcm_bpp0.1_compressed",
     "M": 114,
+    "B": 0,
     "gpu": 0,
     "float32": false,
     "seed": 88888888,
@@ -11,6 +12,5 @@
     "save_reconstructions": false,
     "save_runtimes": false,
     "model_id": "Manojb/stable-diffusion-2-1-base",
-    "old_protocol": false,
     "manual_list_ind": true
 }
