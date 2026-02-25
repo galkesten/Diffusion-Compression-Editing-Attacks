@@ -85,13 +85,13 @@ python src/noisy_channel_runner.py \
 ./py-sbatch.sh src/noisy_channel_runner.py --algorithm ddcm --dataset DIV2K_valid_HR_512 --bpp 0.1 --ber 1e-4 --run_id 2 --num_trials 10 --seed 42 --sample_images 0-5
 ./py-sbatch.sh src/noisy_channel_runner.py --algorithm ddcm --dataset DIV2K_valid_HR_512 --bpp 0.1 --ber 1e-3 --run_id 3 --num_trials 10 --seed 42 --sample_images 0-5
 ./py-sbatch.sh src/noisy_channel_runner.py --algorithm ddcm --dataset DIV2K_valid_HR_512 --bpp 0.1 --ber 1e-2 --run_id 4 --num_trials 10 --seed 42 --sample_images 0-5
-./py-sbatch.shsrc/noisy_channel_runner.py --algorithm ddcm --dataset DIV2K_valid_HR_512 --bpp 0.1 --ber 1e-1 --run_id 5 --num_trials 10 --seed 42 --sample_images 0-5
+./py-sbatch.sh src/noisy_channel_runner.py --algorithm ddcm --dataset DIV2K_valid_HR_512 --bpp 0.1 --ber 1e-1 --run_id 5 --num_trials 10 --seed 42 --sample_images 0-5
 
 
 
 
-python src/noisy_channel_runner.py \
-  --algorithm robust_turbo_ddcm \
+./py-sbatch.sh src/noisy_channel_runner.py \
+  --algorithm turbo_ddcm \
   --dataset dataset_Kodak24 \
   --bpp 0.1 \
   --num_trials 10 \
