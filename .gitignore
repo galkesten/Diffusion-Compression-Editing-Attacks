@@ -8,13 +8,7 @@ __pycache__/
 *.egg
 dist/
 build/
-
-# Results and outputs
-results2/
-ddcm_test_output/
-DIV2K_valid_HR.zip
 # Datasets
-dataset_Kodack24/
 
 # IDE
 .vscode/
