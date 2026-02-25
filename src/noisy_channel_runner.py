@@ -269,7 +269,7 @@ class NoisyChannelExperiment:
         base = os.path.splitext(img_file)[0]
         compressed_path = self.runner.path_for_compressed(self.compressed_dir, base)
         if not compressed_path:
-            return RunOneResult(None, 0, None, None, None, bpp_val, None)
+            return RunOneResult(None, 0, None, None, None, bpp_val, "compressed file not found")
         temp_dir = os.path.join(temp_base, f"ber{ber}_trial{trial}_{base}")
         os.makedirs(temp_dir, exist_ok=True)
         try:
@@ -494,7 +494,8 @@ def main():
     image_files = get_images(dataset_path)
     sample_image_files = resolve_subset(image_files, parse_subset(args.sample_images)) if args.sample_images else None
     ber_values = list(args.ber)
-    output_dir = args.output_dir or os.path.join(project_root, "results", "noisy_channel", args.algorithm, dataset_name_for_paths)
+    results_root = os.path.abspath(args.output_dir) if args.output_dir else os.path.join(project_root, "results")
+    output_dir = os.path.join(results_root, "noisy_channel", args.algorithm, dataset_name_for_paths)
     compressed_dir = args.compressed_dir
 
     import torch
@@ -507,7 +508,7 @@ def main():
 
     if not compressed_dir:
         default_compressed_dir = os.path.join(
-            project_root, "results", "noisy_channel", args.algorithm, dataset_name_for_paths, "compressed",
+            results_root, "noisy_channel", args.algorithm, dataset_name_for_paths, "compressed",
             _output_dir_name(dataset_name_for_paths, args.bpp, args.algorithm),
         )
         need_baseline = not os.path.isdir(default_compressed_dir) or not any(
