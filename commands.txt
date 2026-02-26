@@ -76,7 +76,7 @@ python src/noisy_channel_runner.py \
   --sample_images 0-5
 
 
-python src/noisy_channel_runner.py \
+./py-sbatch.sh src/noisy_channel_runner.py \
   --algorithm bpg \
   --dataset DIV2K_valid_HR_512 \
   --bpp 0.5\
