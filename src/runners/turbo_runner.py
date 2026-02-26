@@ -21,8 +21,8 @@ DEFAULT_TURBO_PARAMS: Dict[str, Any] = {
 DEFAULT_ROBUST_TURBO_PARAMS: Dict[str, Any] = {
     "T": 30,
     "K": 16384,
-    "M": 106,
-    "B": 10,
+    "M": 92,
+    "B": 30,
     "C": 1,
     "seed": 88888888,
     "manual_list_ind": True,

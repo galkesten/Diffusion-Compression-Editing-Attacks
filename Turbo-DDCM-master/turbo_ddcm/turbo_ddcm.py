@@ -132,14 +132,14 @@ class TurboDDCM:
         inner_products_with_residual = (codebook.T @ flat_residual).view(-1)
         abs_inner_products_with_residual = inner_products_with_residual.abs()
 
-        import pandas as pd
-        import os
-
-        tmp = abs_inner_products_with_residual.sort()[0].view(-1)
-        df = pd.DataFrame({'index': range(self.K), 'value': tmp.cpu().numpy()})
-        file_path = "sorted_tensor.csv"
-        file_exists = os.path.isfile(file_path)
-        df.to_csv(file_path, mode='a' if file_exists else 'w', header=not file_exists, index=False)
+        # import pandas as pd
+        # import os
+        #
+        # tmp = abs_inner_products_with_residual.sort()[0].view(-1)
+        # df = pd.DataFrame({'index': range(self.K), 'value': tmp.cpu().numpy()})
+        # file_path = "sorted_tensor.csv"
+        # file_exists = os.path.isfile(file_path)
+        # df.to_csv(file_path, mode='a' if file_exists else 'w', header=not file_exists, index=False)
 
         _, top_s_indices = torch.topk(abs_inner_products_with_residual, self.M)  # Shape: s
         x[top_s_indices] = torch.sign(inner_products_with_residual[top_s_indices])

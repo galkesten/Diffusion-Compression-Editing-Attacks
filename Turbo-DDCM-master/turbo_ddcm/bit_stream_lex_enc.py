@@ -186,11 +186,10 @@ class ComplementSet:
         Returns the i-th smallest number in [1..K] excluding A.
         Raises IndexError if out of range.
         """
-        i += 1 # to 1 base
-        if i < 1 or i > self.size():
+        if i < 0 or i > self.size():
             raise IndexError("Index out of range")
 
-        low, high = 1, self.K
+        low, high = 0, self.K - 1
 
         while low <= high:
             mid = (low + high) // 2
@@ -209,11 +208,11 @@ class ComplementSet:
         Returns the 1-based index of x in the complement set.
         Returns -1 if x is removed or out of range.
         """
-        if x < 1 or x > self.K:
-            return -1
+        if x < 0 or x > (self.K - 1):
+            raise IndexError("out of range")
 
         pos = bisect.bisect_left(self.A, x)
         if pos < len(self.A) and self.A[pos] == x:
             return -1  # x is excluded
 
-        return x - pos - 1 # to zero base
+        return x - pos # to zero base
