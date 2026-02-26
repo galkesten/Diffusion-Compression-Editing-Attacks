@@ -84,7 +84,7 @@ All compression algorithms are exposed through `BaseModelRunner` in `runners/bas
 - `calculate_actual_bpp(binary_file_path, img_height, img_width)` — BPP from file size
 - `flip_bits(binary_path, ber, output_path)` — Apply BER bit flips, return number flipped
 - `get_images(dataset_path, num_samples=None)` — Sorted list of `.png` files
-- `load_jpeg_quality_csv(csv_path, target_bpp=None)` — Load `{image_file: quality}` for JPEG
+- `load_quality_csv(csv_path, target_bpp=None)` — Load `{image_file: quality}` for JPEG/BPG
 - `parse_subset(s)`, `resolve_subset(image_files, subset)` — Parse `"0-4"` or `"0,2,5"` indices
 - `prepare_input_dir(dataset_path, image_files, input_dir, subset)` — Copy images to staging
 - `binary_search_best_int`, `collect_actual_bpp_from_output`, `collect_actual_bpp_by_glob` — Used by `find_compression_params`

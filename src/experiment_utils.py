@@ -144,14 +144,14 @@ def avg_or_zero(values):
     return sum(values) / len(values) if values else 0
 
 
-def load_jpeg_quality_csv(csv_path: str, target_bpp: float = None) -> dict:
-    """Load quality per image from CSV (columns image_file, quality; optional target_bpp). Returns {image_file: quality}."""
+def load_quality_csv(csv_path: str, target_bpp: float = None) -> dict:
+    """Load quality per image from CSV (columns image_file, quality; optional target_bpp). Returns {image_file: quality}. Used by JPEG and BPG."""
     result = {}
     with open(csv_path, newline="") as f:
         reader = csv.DictReader(f)
         fieldnames = reader.fieldnames or []
         if "quality" not in fieldnames:
-            raise ValueError(f"JPEG quality CSV must have 'quality' column: {csv_path}")
+            raise ValueError(f"Quality CSV must have 'quality' column: {csv_path}")
         for row in reader:
             if target_bpp is not None and "target_bpp" in row:
                 try:
