@@ -34,6 +34,8 @@ from runners import (
     DdcmModelRunner,
     JpegModelRunner,
     TurboModelRunner,
+    DiffCRunner,
+    ILLMRunner
 )
 
 
@@ -68,6 +70,10 @@ def _runner_factory(project_root: str, algorithm: str, *, quality_by_image: Opti
         return TurboModelRunner(project_root, robust=False)
     if algorithm == "robust_turbo_ddcm":
         return TurboModelRunner(project_root, robust=True)
+    if algorithm == "diffc":
+        return DiffCRunner(project_root)
+    if algorithm == "illm":
+        return ILLMRunner(project_root)
     raise ValueError(f"Unknown algorithm: {algorithm}")
 
 
@@ -469,7 +475,7 @@ def run_baseline(
 
 def main():
     parser = argparse.ArgumentParser(description="Noisy-channel experiment (runners + experiment_utils)")
-    parser.add_argument("--algorithm", required=True, choices=["jpeg", "ddcm", "turbo_ddcm", "robust_turbo_ddcm"])
+    parser.add_argument("--algorithm", required=True, choices=["jpeg", "ddcm", "turbo_ddcm", "robust_turbo_ddcm", "diffc", "illm"])
     parser.add_argument("--dataset", type=str, default=None)
     parser.add_argument("--bpp", type=float, default=0.1)
     parser.add_argument("--resolution", type=int, default=512)
