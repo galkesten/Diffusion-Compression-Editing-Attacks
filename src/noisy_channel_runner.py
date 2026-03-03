@@ -26,11 +26,12 @@ if _ddcm_path not in sys.path:
 if _turbo_ddcm_path not in sys.path:
     sys.path.insert(0, _turbo_ddcm_path)
 
-from experiment_utils import calculate_actual_bpp, flip_bits, get_images, load_jpeg_quality_csv, parse_subset, resolve_subset
+from experiment_utils import calculate_actual_bpp, flip_bits, get_images, load_quality_csv, parse_subset, resolve_subset
 from fid_utils import compute_patch_fid
 
 from runners import (
     BaseModelRunner,
+    BpgModelRunner,
     DdcmModelRunner,
     JpegModelRunner,
     TurboModelRunner,
@@ -64,6 +65,8 @@ class RunOneResult:
 def _runner_factory(project_root: str, algorithm: str, *, quality_by_image: Optional[Dict[str, int]] = None) -> BaseModelRunner:
     if algorithm == "jpeg":
         return JpegModelRunner(quality_by_image=quality_by_image or {})
+    if algorithm == "bpg":
+        return BpgModelRunner(quality_by_image=quality_by_image or {})
     if algorithm == "ddcm":
         return DdcmModelRunner(project_root)
     if algorithm == "turbo_ddcm":
@@ -436,15 +439,16 @@ def run_baseline(
     image_files: List[str],
     target_bpp: float,
     resolution: int,
-    jpeg_quality_csv: Optional[str] = None,
+    quality_csv: Optional[str] = None,
     compressed_dir: Optional[str] = None,
 ) -> str:
     """Run compression (and decompression) for all images; return compressed_dir.
-    DDCM/Turbo: use runner default params. JPEG: quality per image from jpeg_quality_csv (required).
+    DDCM/Turbo: use runner default params. JPEG/BPG: quality per image from quality_csv (required).
     If compressed_dir is given, use it; otherwise build default path under results/noisy_channel/...
     """
     from experiment_utils import prepare_input_dir
-    quality_by_image = load_jpeg_quality_csv(jpeg_quality_csv, target_bpp) if algorithm == "jpeg" and jpeg_quality_csv and os.path.isfile(jpeg_quality_csv) else None
+    needs_quality = algorithm in ("jpeg", "bpg")
+    quality_by_image = load_quality_csv(quality_csv, target_bpp) if needs_quality and quality_csv and os.path.isfile(quality_csv) else None
     runner = _runner_factory(project_root, algorithm, quality_by_image=quality_by_image)
     dataset_name = os.path.basename(os.path.normpath(dataset_path))
     if compressed_dir is None:
@@ -454,8 +458,8 @@ def run_baseline(
         f for f in os.listdir(compressed_dir) if not f.startswith(".")
     )
     if not has_content:
-        if algorithm == "jpeg" and not quality_by_image:
-            raise ValueError("JPEG requires jpeg_quality_csv (CSV with columns image_file, quality)")
+        if needs_quality and not quality_by_image:
+            raise ValueError(f"{algorithm.upper()} requires --quality_csv (CSV with columns image_file, quality)")
         staging = os.path.join(compressed_dir, "temp_input")
         os.makedirs(staging, exist_ok=True)
         prepare_input_dir(dataset_path, image_files, staging)
@@ -475,7 +479,7 @@ def run_baseline(
 
 def main():
     parser = argparse.ArgumentParser(description="Noisy-channel experiment (runners + experiment_utils)")
-    parser.add_argument("--algorithm", required=True, choices=["jpeg", "ddcm", "turbo_ddcm", "robust_turbo_ddcm", "diffc", "illm"])
+    parser.add_argument("--algorithm", required=True, choices=["jpeg", "bpg", "ddcm", "turbo_ddcm", "robust_turbo_ddcm", "diffc", "illm"])
     parser.add_argument("--dataset", type=str, default=None)
     parser.add_argument("--bpp", type=float, default=0.1)
     parser.add_argument("--resolution", type=int, default=512)
@@ -486,7 +490,7 @@ def main():
     parser.add_argument("--output_dir", type=str, default=None)
     parser.add_argument("--run_id", type=int, default=None, help="If set, appended to dataset name in all result paths so parallel runs do not overwrite each other.")
     parser.add_argument("--compressed_dir", type=str, default=None, help="Precomputed compressed dir; if set, skip baseline")
-    parser.add_argument("--jpeg_quality_csv", type=str, default=None, help="For JPEG: CSV with image_file, quality (required for baseline if algorithm=jpeg)")
+    parser.add_argument("--quality_csv", type=str, default=None, help="For JPEG/BPG: CSV with image_file, quality (required for baseline if algorithm=jpeg or bpg)")
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
     seed = args.seed
@@ -510,7 +514,7 @@ def main():
     print("GPU: %s (%s)" % ("cuda:0" if gpu_avail else "cpu", gpu_name))
     print("noisy_channel_runner params: algorithm=%s dataset=%s bpp=%s resolution=%s num_images=%d" % (args.algorithm, dataset_path, args.bpp, args.resolution, len(image_files)))
     print("  ber=%s num_trials=%d num_samples_per_ber=%d output_dir=%s" % (ber_values, args.num_trials, args.num_samples_per_ber, output_dir))
-    print("  compressed_dir=%s" % (compressed_dir or "(will run baseline)"))
+    print("  compressed_dir=%s quality_csv=%s" % (compressed_dir or "(will run baseline)", args.quality_csv or "—"))
 
     if not compressed_dir:
         default_compressed_dir = os.path.join(
@@ -529,7 +533,7 @@ def main():
                 image_files,
                 args.bpp,
                 args.resolution,
-                jpeg_quality_csv=args.jpeg_quality_csv,
+                quality_csv=args.quality_csv,
                 compressed_dir=default_compressed_dir,
             )
         else:

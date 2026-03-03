@@ -7,7 +7,9 @@ import csv
 import io
 import os
 import shutil
+import subprocess
 import sys
+import tempfile
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 _script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -37,10 +39,62 @@ from experiment_utils import (
     prepare_input_dir,
     resolve_subset,
 )
-from runners import BaseModelRunner, DdcmModelRunner, JpegModelRunner, TurboModelRunner
+from runners import BaseModelRunner, BpgModelRunner, DdcmModelRunner, JpegModelRunner, TurboModelRunner
 
 
 AlgoConfigItem = Dict[str, Any]  # runner_factory, prepare_params, output_dir_name, path_for_compressed, csv_*, write_csv_rows
+
+
+def find_bpg_quality_for_bpp(img: Image.Image, target_bpp: float, verbose: bool = True) -> Tuple[int, float]:
+    w, h = img.size
+    pixels = w * h
+
+    low, high = 0, 51
+    best_q, best_bpp, best_diff = 0, 0.0, float("inf")
+    iteration = 0
+
+    for _ in range(20):
+        iteration += 1
+        mid = (low + high) // 2
+
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as fp:
+            tmp_png = fp.name
+        with tempfile.NamedTemporaryFile(suffix=".bpg", delete=False) as fq:
+            tmp_bpg = fq.name
+
+        try:
+            img.save(tmp_png, format="PNG")
+            subprocess.run(
+                ["bpgenc", "-q", str(mid), "-o", tmp_bpg, tmp_png],
+                check=True,
+                capture_output=True,
+            )
+            size_bytes = os.path.getsize(tmp_bpg)
+            bpp = (size_bytes * 8) / pixels
+        finally:
+            for p in (tmp_png, tmp_bpg):
+                if os.path.exists(p):
+                    os.unlink(p)
+
+        diff = abs(bpp - target_bpp)
+        if diff < best_diff:
+            best_q, best_bpp, best_diff = mid, bpp, diff
+        if verbose:
+            print(f"    BPG binary search iter {iteration}: q={mid} bpp={bpp:.4f} (target={target_bpp})")
+
+        if bpp > target_bpp:
+            # file too big → increase q (worse quality, smaller file)
+            low = mid + 1
+        else:
+            # file too small → decrease q (better quality, larger file)
+            high = mid - 1
+
+        if low > high:
+            break
+
+    if verbose:
+        print(f"    BPG best: q={best_q} bpp={best_bpp:.4f}")
+    return best_q, best_bpp
 
 
 def find_jpeg_quality_for_bpp(img, target_bpp, resize_to=(512, 512)):
@@ -83,6 +137,34 @@ def find_ddcm_M_for_bpp(target_bpp, T, K, C, img_height, img_width):
 # ---------------------------------------------------------------------------
 # Per-algorithm behavior (used inside ALGO_CONFIG)
 # ---------------------------------------------------------------------------
+def _bpg_runner_factory(_root: str, params_info: Optional[Dict[str, Any]]) -> BpgModelRunner:
+    params = params_info["params"] if params_info else {}
+    quality_by_image = params.get("quality_by_image", {})
+    return BpgModelRunner(quality_by_image=quality_by_image)
+
+
+def _prepare_params_bpg(target_bpp: float, dataset_path: str, images_to_use: List[str], img_height: int, img_width: int, _resize_to: Tuple[int, int], _params: Dict[str, Any]) -> Dict[str, Any]:
+    quality_by_image = {}
+    n = len(images_to_use)
+    for i, img_file in enumerate(images_to_use):
+        print(f"  BPG prepare_params: image {i+1}/{n} {img_file} (target_bpp={target_bpp})")
+        img = Image.open(os.path.join(dataset_path, img_file)).convert("RGB")
+        if img.size != (img_width, img_height):
+            raise ValueError(f"image {img_file} size {img.size} != expected {img_width}x{img_height}")
+        q, _ = find_bpg_quality_for_bpp(img, target_bpp)
+        quality_by_image[img_file] = q
+    return {"params": {"quality_by_image": quality_by_image}}
+
+
+def _write_csv_bpg(csv_path: str, target_bpp: float, params_info: Dict[str, Any], pairs: List[Tuple[str, float]], images_to_use: List[str], errors: Dict[str, str], dataset_name: str) -> None:
+    quality_by_image = params_info["params"].get("quality_by_image", {})
+    pair_dict = dict(pairs)
+    for img_file in images_to_use:
+        q = quality_by_image.get(img_file, "")
+        actual = errors.get(img_file, "") if errors else pair_dict.get(img_file, 0.0)
+        append_csv_row(csv_path, [dataset_name, img_file, target_bpp, q, actual])
+
+
 def _jpeg_runner_factory(_root: str, params_info: Optional[Dict[str, Any]]) -> JpegModelRunner:
     params = params_info["params"] if params_info else {}
     quality_by_image = params.get("quality_by_image", {})
@@ -171,6 +253,17 @@ def _make_config(
 
 # Algorithm config: one place for all algo-specific behavior
 ALGO_CONFIG: Dict[str, AlgoConfigItem] = {
+    "bpg": _make_config(
+        params={},
+        runner_factory=_bpg_runner_factory,
+        prepare_params=_prepare_params_bpg,
+        output_dir_name=lambda dataset_name, target_bpp, _algo: f"{dataset_name}_bpg_bpp{target_bpp}",
+        path_for_compressed=lambda out_dir, base, _pi: os.path.join(out_dir, f"{base}_compressed.bpg"),
+        csv_key="bpg",
+        csv_filename="bpg_compression_params.csv",
+        csv_headers=["dataset", "image_file", "target_bpp", "quality", "actual_bpp"],
+        write_csv_rows=_write_csv_bpg,
+    ),
     "jpeg": _make_config(
         params={},
         runner_factory=_jpeg_runner_factory,
@@ -282,7 +375,7 @@ def init_csv_for_algorithm(project_root: str, algorithm: str, dataset_name: str)
 def main() -> None:
     parser = argparse.ArgumentParser(description="Find compression parameters for different algorithms")
     parser.add_argument("--algorithms", nargs="+", choices=ALL_ALGOS + ["all"], default=["all"])
-    parser.add_argument("--bpp", nargs="+", type=float, choices=[0.1, 0.5, 1.0], default=[0.1, 0.5, 1.0])
+    parser.add_argument("--bpp", nargs="+", type=float, choices=[0.1, 0.2, 0.5, 1.0], default=[0.1, 0.2, 0.5, 1.0])
     parser.add_argument("--dataset", type=str, default=None)
     parser.add_argument("--subset", type=str, default=None, help="'0-4' or '0,2,5'")
     parser.add_argument("--height", type=int, default=512)
