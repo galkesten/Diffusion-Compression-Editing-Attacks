@@ -113,6 +113,7 @@ python src/noisy_channel_runner.py \
 
 
 
+
 ./py-sbatch.sh src/noisy_channel_runner.py \
   --algorithm turbo_ddcm \
   --dataset dataset_Kodak24 \
@@ -121,3 +122,12 @@ python src/noisy_channel_runner.py \
   --seed 42 \
   --sample_images 0-5 \
   --output_dir results2
+
+
+./py-sbatch.sh src/noisy_channel_runner.py \
+  --algorithm illm \
+  --dataset DIV2K_valid_HR_512 \
+  --bpp 0.07 \
+  --num_trials 10 \
+  --seed 42 \
+  --sample_images 0-5
