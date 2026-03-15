@@ -121,10 +121,44 @@ class ILLMRunner(BaseModelRunner):
         bin_files = [f for f in os.listdir(compressed_dir) if f.endswith(bin_suffix)]
         image_names = [os.path.splitext(f)[0] + ".png" for f in bin_files]
 
+        import subprocess
+        import sys
+
         try:
-            _, illm_decompress = self._get_api()
-            args = SimpleNamespace(path=compressed_dir, output_path=compressed_dir, model=resolved_params['model'], com_decom='decompression')
-            illm_decompress(args)
+            cmd = [
+                sys.executable,
+                "-c",
+            f"""
+from types import SimpleNamespace
+from src.runners.illm_runner import ILLMRunner
+import os
+os.chdir('{self.illm_root}')
+obj = ILLMRunner('{self.illm_root}', model_params={self.model_params})
+args = SimpleNamespace(
+    path=r'{compressed_dir}',
+    output_path=r'{compressed_dir}',
+    model=r'{resolved_params['model']}',
+    com_decom='decompression'
+)
+
+_, illm_decompress = obj._get_api()
+illm_decompress(args)
+
+"""
+            ]
+
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            if result.returncode != 0:
+                raise RuntimeError(result.stderr or f"Subprocess failed (code {result.returncode})")
+
+
+        #     _, illm_decompress = self._get_api()
+        #     args = SimpleNamespace(path=compressed_dir, output_path=compressed_dir, model=resolved_params['model'], com_decom='decompression')
+        #     import subprocess
+        #     result = subprocess.run(["python", "decompress_script.py"], capture_output=True)
+        #     if result.returncode != 0:
+        #         illm_decompress(args)
+
         except Exception as exc:
             for image_file in image_names:
                 errors[image_file] = str(exc)

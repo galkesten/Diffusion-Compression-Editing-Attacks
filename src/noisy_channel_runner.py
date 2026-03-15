@@ -34,9 +34,10 @@ from runners import (
     BpgModelRunner,
     DdcmModelRunner,
     JpegModelRunner,
-    TurboModelRunner,
+    # TurboModelRunner,
     DiffCRunner,
-    ILLMRunner
+    ILLMRunner,
+    StableCodecRunner
 )
 
 
@@ -77,6 +78,8 @@ def _runner_factory(project_root: str, algorithm: str, *, quality_by_image: Opti
         return DiffCRunner(project_root)
     if algorithm == "illm":
         return ILLMRunner(project_root)
+    if algorithm == "stable_codec":
+        return StableCodecRunner(project_root)
     raise ValueError(f"Unknown algorithm: {algorithm}")
 
 
@@ -281,26 +284,26 @@ class NoisyChannelExperiment:
             return RunOneResult(None, 0, None, None, None, bpp_val, "compressed file not found")
         temp_dir = os.path.join(temp_base, f"ber{ber}_trial{trial}_{base}")
         os.makedirs(temp_dir, exist_ok=True)
-        try:
-            _, num_flips = self._prepare_temp_and_flip(compressed_path, temp_dir, base, ber, trial)
-            errs = self._decompress_temp(temp_dir)
-            if img_file in errs:
-                return RunOneResult(None, num_flips, None, None, None, bpp_val, errs[img_file])
-            decomp_path = self._find_decompressed_png(temp_dir, base)
-            if not decomp_path or not os.path.isfile(decomp_path):
-                return RunOneResult(None, num_flips, None, None, None, bpp_val, errs.get(img_file, "no PNG produced"))
-            dest_in_trial = os.path.join(trial_folder, img_file)
-            os.makedirs(os.path.dirname(dest_in_trial) or ".", exist_ok=True)
-            shutil.move(decomp_path, dest_in_trial)
-            ref = Image.open(os.path.join(self.dataset_path, img_file)).convert("RGB").resize((self.resolution, self.resolution))
-            decomp = Image.open(dest_in_trial).convert("RGB")
-            psnr_val = self.metrics.psnr(ref, decomp)
-            niqe_val = self.metrics.niqe(decomp)
-            lpips_val = self.metrics.lpips(ref, decomp)
-            return RunOneResult(dest_in_trial, num_flips, psnr_val, niqe_val, lpips_val, bpp_val, None)
-        finally:
-            if os.path.isdir(temp_dir):
-                shutil.rmtree(temp_dir, ignore_errors=True)
+        # try:
+        _, num_flips = self._prepare_temp_and_flip(compressed_path, temp_dir, base, ber, trial)
+        errs = self._decompress_temp(temp_dir)
+        if img_file in errs:
+            return RunOneResult(None, num_flips, None, None, None, bpp_val, errs[img_file])
+        decomp_path = self._find_decompressed_png(temp_dir, base)
+        if not decomp_path or not os.path.isfile(decomp_path):
+            return RunOneResult(None, num_flips, None, None, None, bpp_val, errs.get(img_file, "no PNG produced"))
+        dest_in_trial = os.path.join(trial_folder, img_file)
+        os.makedirs(os.path.dirname(dest_in_trial) or ".", exist_ok=True)
+        shutil.move(decomp_path, dest_in_trial)
+        ref = Image.open(os.path.join(self.dataset_path, img_file)).convert("RGB").resize((self.resolution, self.resolution))
+        decomp = Image.open(dest_in_trial).convert("RGB")
+        psnr_val = self.metrics.psnr(ref, decomp)
+        niqe_val = self.metrics.niqe(decomp)
+        lpips_val = self.metrics.lpips(ref, decomp)
+        return RunOneResult(dest_in_trial, num_flips, psnr_val, niqe_val, lpips_val, bpp_val, None)
+        # finally:
+        #     if os.path.isdir(temp_dir):
+        #         shutil.rmtree(temp_dir, ignore_errors=True)
 
     def _write_baseline_rows(
         self,
@@ -377,7 +380,8 @@ class NoisyChannelExperiment:
                     os.makedirs(trial_folder, exist_ok=True)
                     first_decomp_error: Optional[str] = None
                     trial_rows: List[List[Any]] = []
-                    for img_file in self.image_files:
+                    for idx, img_file in enumerate(self.image_files):
+                        print(idx)
                         r = self.run_one(
                             img_file, ber, trial, temp_base, trial_folder,
                             bpp_val=bpp_by_image.get(img_file),
@@ -479,7 +483,7 @@ def run_baseline(
 
 def main():
     parser = argparse.ArgumentParser(description="Noisy-channel experiment (runners + experiment_utils)")
-    parser.add_argument("--algorithm", required=True, choices=["jpeg", "bpg", "ddcm", "turbo_ddcm", "robust_turbo_ddcm", "diffc", "illm"])
+    parser.add_argument("--algorithm", required=True, choices=["jpeg", "bpg", "ddcm", "turbo_ddcm", "robust_turbo_ddcm", "diffc", "illm", "stable_codec"])
     parser.add_argument("--dataset", type=str, default=None)
     parser.add_argument("--bpp", type=float, default=0.1)
     parser.add_argument("--resolution", type=int, default=512)

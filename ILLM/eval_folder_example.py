@@ -47,7 +47,7 @@ def compress(args):
     model.update_tensor_devices("compress")
     totensor = ToTensor()
 
-    for image_path in tqdm(list(clic_path.glob("*.png"))):
+    for image_path in list(clic_path.glob("*.png")):
         with open(image_path, "rb") as f:
             image_pil = Image.open(f)
             image_pil = image_pil.convert("RGB")
@@ -79,7 +79,7 @@ def decompress(args):
     model.update()
     model.update_tensor_devices("compress")
 
-    for bin_path in tqdm(list(bins_path.glob("*.bin"))):
+    for bin_path in list(bins_path.glob("*.bin")):
         with open(bin_path, "rb") as f:
             compressed = pickle.load(f)
 

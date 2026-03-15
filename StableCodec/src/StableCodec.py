@@ -18,7 +18,7 @@ class StableCodec(torch.nn.Module):
         self.latent_tiled_size = args.latent_tiled_size
         self.latent_tiled_overlap = args.latent_tiled_overlap
 
-        print("[SD-Turbo]: Building SD-Turbo ......")
+        # print("[SD-Turbo]: Building SD-Turbo ......")
         self.tokenizer = AutoTokenizer.from_pretrained(sd_path, subfolder="tokenizer")
         self.text_encoder = CLIPTextModel.from_pretrained(sd_path, subfolder="text_encoder").cuda()
         self.sched = make_1step_sched(sd_path)
@@ -34,9 +34,9 @@ class StableCodec(torch.nn.Module):
         self.text_encoder.requires_grad_(False)
 
         self._init_tiled_vae(encoder_tile_size=args.vae_encoder_tiled_size, decoder_tile_size=args.vae_decoder_tiled_size)
-        print("[SD-Turbo]: Done!")
+        # print("[SD-Turbo]: Done!")
 
-        print("[LoRA]: Initializing LoRA ......")
+        # print("[LoRA]: Initializing LoRA ......")
         target_modules_vae = r"^encoder\..*(conv1|conv2|conv_in|conv_shortcut|conv|conv_out|to_k|to_q|to_v|to_out\.0)$"
         target_modules_unet = [
             "to_k", "to_q", "to_v", "to_out.0", "conv", "conv1", "conv2", "conv_shortcut", "conv_out",
@@ -65,21 +65,21 @@ class StableCodec(torch.nn.Module):
         for name, module in self.unet.named_modules():
             if name in self.unet_lora_layers:
                 module.forward = my_lora_fwd.__get__(module, module.__class__)
-        print("[LoRA]: Done!")
+        # print("[LoRA]: Done!")
 
-        print("[Latent Codec]: Initializing Latent Codec ......")
+        # print("[Latent Codec]: Initializing Latent Codec ......")
         self.codec = LatentCodec()
         temp_layer = nn.Conv2d(320, 320, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
         self.unet.conv_in = temp_layer
-        print("[Latent Codec]: Done!")
+        # print("[Latent Codec]: Done!")
 
-        print("[Prompt]: Setting Prompt ......")
+        # print("[Prompt]: Setting Prompt ......")
         self.set_prompt(args.pos_prompt)
         del self.tokenizer, self.text_encoder
-        print("[Prompt]: Done!")
+        # print("[Prompt]: Done!")
 
         if args.codec_path is not None:
-            print("[LoRA & Latent Codec & Auxiliary Decoder]: Loading Pretrained Weights ......")
+            # print("[LoRA & Latent Codec & Auxiliary Decoder]: Loading Pretrained Weights ......")
             sd = torch.load(args.codec_path, map_location="cpu")
             _sd_codec = self.codec.state_dict()
             for k in sd["state_dict_codec"]:
@@ -95,16 +95,16 @@ class StableCodec(torch.nn.Module):
             for k in sd["state_dict_unet"]:
                 _sd_unet[k] = sd["state_dict_unet"][k]
             self.unet.load_state_dict(_sd_unet)
-            print("[LoRA & Latent Codec & Auxiliary Decoder]: Done!")
+            # print("[LoRA & Latent Codec & Auxiliary Decoder]: Done!")
 
-        print("[Auxiliary Encoder]: Loading Pretrained Weights ......")
+        # print("[Auxiliary Encoder]: Loading Pretrained Weights ......")
         model = ELIC()
         checkpoint = torch.load(args.elic_path)
         model.load_state_dict(checkpoint)
         self.aux_codec = model.g_a
         self.aux_codec.eval()
         self.aux_codec.requires_grad_(False)
-        print("[Auxiliary Encoder]: Done!")
+        # print("[Auxiliary Encoder]: Done!")
 
     def set_prompt(self, pos_prompt):
         caption_tokens = self.tokenizer(pos_prompt, max_length=self.tokenizer.model_max_length, padding="max_length", truncation=True, return_tensors="pt").input_ids.cuda()
@@ -135,7 +135,7 @@ class StableCodec(torch.nn.Module):
         if h * w <= tile_size * tile_size:
             model_pred = self.unet(lq_latent_hat, self.timesteps, encoder_hidden_states=pos_caption_enc).sample
         else:
-            print(f"[Tiled Latent]: the input latent is {h}x{w}, need to tiled")
+            # print(f"[Tiled Latent]: the input latent is {h}x{w}, need to tiled")
             tile_size = min(tile_size, min(h, w))
             tile_weights = self._gaussian_weights(tile_size, tile_size, 1).to(lq_latent_hat.device)
 

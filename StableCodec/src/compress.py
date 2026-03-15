@@ -51,8 +51,77 @@ def decompress_one_image(net, bin_path, ori_h, ori_w, img_name, prompt):
     return out_img
 
 
-def main(args):
+def compress(args):
+    from huggingface_hub import snapshot_download
+    sd_path = snapshot_download(repo_id="stabilityai/sd-turbo")
 
+    net = StableCodec(sd_path=sd_path, args=args)
+    net.cuda().eval()
+    net.codec.update(force=True)
+    args.net = net
+
+    if args.enable_xformers_memory_efficient_attention:
+        if is_xformers_available():
+            net.unet.enable_xformers_memory_efficient_attention()
+        else:
+            raise ValueError("xformers is not available, please install it by running `pip install xformers`")
+
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
+    ])
+
+    images = glob.glob(args.img_path + '/*.png')
+
+    for img_path in images:
+        (path, name) = os.path.split(img_path)
+        fname, ext = os.path.splitext(name)
+
+        img = preprocess_image(img_path, transform).cuda().unsqueeze(0)
+        ori_h, ori_w = img.shape[2:]
+
+        pad_h = (math.ceil(ori_h / 256)) * 256 - ori_h
+        pad_w = (math.ceil(ori_w / 256)) * 256 - ori_w
+        img_padded = F.pad(img, pad=(0, pad_w, 0, pad_h), mode='reflect')
+
+        with torch.no_grad():
+            compress_one_image(args.net, args.bin_path, ori_h, ori_w, fname, img_padded)
+
+
+def decompress(args):
+    from huggingface_hub import snapshot_download
+    sd_path = snapshot_download(repo_id="stabilityai/sd-turbo")
+
+    net = StableCodec(sd_path=sd_path, args=args)
+    net.cuda().eval()
+    net.codec.update(force=True)
+    args.net = net
+
+    if args.enable_xformers_memory_efficient_attention:
+        if is_xformers_available():
+            net.unet.enable_xformers_memory_efficient_attention()
+        else:
+            raise ValueError("xformers is not available, please install it by running `pip install xformers`")
+
+    for bin_path in Path(args.input_path).iterdir():
+        if (not bin_path.is_file()) or  (not bin_path.suffix == ""):
+            continue
+
+        bin_path = str(bin_path)
+        (path, name) = os.path.split(bin_path)
+        fname, ext = os.path.splitext(name)
+        outf = os.path.join(args.rec_path, fname+'.png')
+
+        pos_tag_prompt = [1]
+
+        with torch.no_grad():
+            out_img = decompress_one_image(args.net, args.input_path, args.ori_h, args.ori_w, fname, pos_tag_prompt)
+
+        output_pil = transforms.ToPILImage()(out_img[0].clamp(0.0, 1.0))
+        output_pil.save(outf)
+
+
+def main(args):
     if args.sd_path is None:
         from huggingface_hub import snapshot_download
         sd_path = snapshot_download(repo_id="stabilityai/sd-turbo")
@@ -80,12 +149,12 @@ def main(args):
     bpp = []
     pos_tag_prompt = [1]
     images = glob.glob(args.img_path + '/*.png')
-    print(f'\nFind {str(len(images))} images in {args.img_path}\n')
+    # print(f'\nFind {str(len(images))} images in {args.img_path}\n')
 
     results = []
     for img_path in images:
 
-        print('[Processing]', img_path)
+        # print('[Processing]', img_path)
         (path, name) = os.path.split(img_path)
         fname, ext = os.path.splitext(name)
         outf = os.path.join(args.rec_path, fname+'.png')
@@ -101,7 +170,7 @@ def main(args):
             try:
                 compression_start = time.time()
                 rate = compress_one_image(net, args.bin_path, ori_h, ori_w, fname, img_padded)
-                print(rate, )
+                # print(rate, )
                 compression_end = time.time()
                 compression_time = compression_end - compression_start
 
