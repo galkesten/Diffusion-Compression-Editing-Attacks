@@ -9,6 +9,7 @@ import os
 import shutil
 import sys
 from typing import Any, Dict, Optional
+import numpy as np
 
 from .base import BaseModelRunner, list_png_sorted
 
@@ -141,6 +142,7 @@ class DdcmModelRunner(BaseModelRunner):
         errors: Dict[str, str] = {}
         cwd = os.getcwd()
         try:
+            np_state_before_ddcm = np.random.get_state()
             os.chdir(self.project_root)
             compressed_rel = os.path.relpath(compressed_abs, self.project_root)
             ddcm_main = self._get_api()
@@ -151,6 +153,7 @@ class DdcmModelRunner(BaseModelRunner):
                 gpu=0,
                 float16=True,
             )
+            np.random.set_state(np_state_before_ddcm)
         except Exception as exc:
             for image_file in image_names:
                 errors[image_file] = str(exc)

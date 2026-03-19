@@ -34,7 +34,7 @@ from runners import (
     BpgModelRunner,
     DdcmModelRunner,
     JpegModelRunner,
-    # TurboModelRunner,
+    TurboModelRunner,
     DiffCRunner,
     ILLMRunner,
     StableCodecRunner
