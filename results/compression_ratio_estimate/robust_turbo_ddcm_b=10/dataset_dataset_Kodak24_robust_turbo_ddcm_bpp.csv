@@ -1,0 +1,2 @@
+dataset,target_bpp,M,theoretical_bpp,actual_bpp,T,K,C,B
+dataset_Kodak24,0.1,106,0.09997559,0.0999755859375,30,16384,1,10

@@ -1,8 +1,8 @@
 {
     "input_dir": "/home/galkesten/Diffusion-Compression-Editing-Attacks/results/compression_ratio_estimate/robust_turbo_ddcm/DIV2K_valid_HR_512_robust_turbo_ddcm_bpp0.1_compressed/temp_input",
     "output_dir": "/home/galkesten/Diffusion-Compression-Editing-Attacks/results/compression_ratio_estimate/robust_turbo_ddcm/DIV2K_valid_HR_512_robust_turbo_ddcm_bpp0.1_compressed",
-    "M": 73,
-    "B": 73,
+    "M": 106,
+    "B": 10,
     "gpu": 0,
     "float32": false,
     "seed": 88888888,

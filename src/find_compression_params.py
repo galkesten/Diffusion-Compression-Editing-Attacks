@@ -197,11 +197,20 @@ def _prepare_params_ddcm(target_bpp: float, _dataset_path: str, _images_to_use: 
 def _prepare_params_turbo(target_bpp: float, _dataset_path: str, _images_to_use: List[str], img_height: int, img_width: int, _resize_to: Tuple[int, int], params: Dict[str, Any]) -> Dict[str, Any]:
     p = params
     T, K, C = int(p["T"]), int(p["K"]), int(p["C"])
-    B = int(p["B"])  # Required. turbo_ddcm: 0, robust_turbo_ddcm: 10 (from ALGO_CONFIG)
-    M = find_turbo_ddcm_M_for_bpp(target_bpp, T, K, C, B, img_height, img_width)
+    B_param = p["B"]
+    if B_param == "M":
+        # robust_turbo_ddcm: B equals chosen M — search with B=m for each candidate m
+        M = binary_search_best_int(
+            target_bpp, 1, min(K, 10000),
+            lambda m: _turbo_bpp_with_manual_list_ind(T, K, m, C, m, img_height, img_width),
+        )
+        B = M
+    else:
+        B = int(B_param)
+        M = find_turbo_ddcm_M_for_bpp(target_bpp, T, K, C, B, img_height, img_width)
     print(f"M: {M}")
     theoretical = _turbo_bpp_with_manual_list_ind(T, K, M, C, B, img_height, img_width)
-    return {"params": {**p, "M": M}, "theoretical": theoretical}
+    return {"params": {**p, "M": M, "B": B}, "theoretical": theoretical}
 
 
 def _write_csv_jpeg(csv_path: str, target_bpp: float, params_info: Dict[str, Any], pairs: List[Tuple[str, float]], images_to_use: List[str], errors: Dict[str, str], dataset_name: str) -> None:
@@ -298,7 +307,7 @@ ALGO_CONFIG: Dict[str, AlgoConfigItem] = {
         write_csv_rows=_write_csv_combined,
     ),
     "robust_turbo_ddcm": _make_config(
-        params={"T": 30, "K": 16384, "C": 1, "B": 10, "seed": 88888888, "manual_list_ind": True},
+        params={"T": 30, "K": 16384, "C": 1, "B": "M", "seed": 88888888, "manual_list_ind": True},
         runner_factory=lambda root, params_info=None: TurboModelRunner(root, robust=True, model_params=params_info["params"] if params_info else None),
         prepare_params=_prepare_params_turbo,
         output_dir_name=lambda dataset_name, target_bpp, algo: f"{dataset_name}_{algo}_bpp{target_bpp}_compressed",
