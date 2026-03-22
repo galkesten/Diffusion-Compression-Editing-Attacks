@@ -10,6 +10,12 @@ dist/
 build/
 # Datasets
 
+# Local scripts/config (not tracked)
+py-sbatch.sh
+jupyter-lab.sh
+commands.txt
+pyrightconfig.json
+
 # IDE
 .vscode/
 .idea/
@@ -34,3 +40,4 @@ temp_input/
 results/noisy_channel/ddcm/DIV2K_valid_HR_512_run*/
 Turbo-DDCM-master/sorted_tensor.csv
 StableCodec/ckpts/
+results2/
