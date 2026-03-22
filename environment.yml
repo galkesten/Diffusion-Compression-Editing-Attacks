@@ -1,12 +1,19 @@
-# Conda environment for src/ (noisy_channel_runner, FID, Turbo-DDCM, etc.)
 # Create: conda env create -f environment.yml
 # Then install PyTorch CUDA: pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
 #
-# If "ImportError: lib...so: cannot open shared object file" appears for PIL:
-#   conda install -c conda-forge pillow --force-reinstall
-# That restores conda's Pillow and its native libs (avoids pip wheel expecting system libs).
+# --- RUST (for DiffC zipf_encoding) ---
+#   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+#   Then: cd DiffC/lib/diffc/rcc/arithmetic-coding/python-bindings && pip install .
+#
+# --- BPG (system install, not pip) ---
+#   Build from https://bellard.org/bpg/ (make, make install). Must have bpgenc and bpgdec in PATH.
+#
+# --- Per-algorithm ---
+#   JPEG: Pillow (included). DDCM/Turbo-DDCM: diffusers, transformers (included).
+#   DiffC: zipf_encoding build + CuPy. ILLM: neuralcompression.
+#   StableCodec: ckpts in StableCodec/ckpts/ (elic_official.pth, stablecodec_ft2.pkl).
 
-name: turbo_ddcm_clean
+name: bit_flips_analysis
 
 channels:
   - conda-forge
@@ -14,25 +21,41 @@ channels:
 
 dependencies:
   - python=3.10
-  # Conda-installed (solved by conda). Use conda's Pillow so native libs match.
-  - numpy
+  - numpy<2
   - pillow
   - libtiff
   - openjpeg
   - zlib-ng
   - scikit-image
+  - scipy
   - pandas
   - matplotlib
   - seaborn
   - jupyterlab
   - setuptools
   - pip
-  # Pip-installed after env create (pip may pull in another Pillow; if PIL breaks, reinstall pillow from conda)
   - pip:
-    - torchmetrics
+    # DiffC
+    - "cupy-cuda12x<14"
+    - pyyaml
+    - easydict
+    - setuptools-rust
+    # ILLM (MS-ILLM)
     - neuralcompression
+    # StableCodec
+    - compressai
+    - einops
+    - peft
+    - huggingface_hub
+    # DDCM
+    - opencv-python
+    - timm
+    - facexlib
+    - xformers
+    # Shared
+    - torchmetrics
     - pyiqa
-    # Turbo-DDCM (pinned for compatibility)
+    # Turbo-DDCM, DDCM (pinned for compatibility)
     - diffusers==0.32.2
     - transformers==4.43.0
     - accelerate==1.3.0
