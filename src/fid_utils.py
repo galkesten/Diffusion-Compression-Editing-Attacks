@@ -50,6 +50,7 @@ def compute_patch_fid(
     n_pairs = 0
     total_patches = 0
     missing: List[str] = []
+    resized: List[str] = []
 
     for img_file in image_files:
         if not any(img_file.lower().endswith(ext) for ext in (".png", ".jpg", ".jpeg")):
@@ -57,17 +58,19 @@ def compute_patch_fid(
 
         ref_path = os.path.abspath(os.path.join(ref_dir, img_file))
         gen_path = os.path.abspath(os.path.join(gen_dir, img_file))
-        # print(f"[FID] ref_path: {ref_path}")
-        # print(f"[FID] gen_path: {gen_path}")
         if not os.path.isfile(ref_path) or not os.path.isfile(gen_path):
             missing.append(img_file)
             continue
 
-        gt_img = to_tensor(Image.open(ref_path).convert("RGB")).to(device).unsqueeze(0)
-        rec_img = to_tensor(Image.open(gen_path).convert("RGB")).to(device).unsqueeze(0)
-        assert gt_img.shape == rec_img.shape, (
-            f"FID requires same shape. Got {gt_img.shape} vs {rec_img.shape} for {img_file}"
-        )
+        ref_pil = Image.open(ref_path).convert("RGB")
+        rec_pil = Image.open(gen_path).convert("RGB")
+        if ref_pil.size != rec_pil.size:
+            old_w, old_h = ref_pil.size
+            ref_pil = ref_pil.resize(rec_pil.size)
+            resized.append(img_file)
+            print("[FID] Resized %s ref to match decomp: %dx%d -> %dx%d" % (img_file, old_w, old_h, rec_pil.size[0], rec_pil.size[1]))
+        gt_img = to_tensor(ref_pil).to(device).unsqueeze(0)
+        rec_img = to_tensor(rec_pil).to(device).unsqueeze(0)
 
         # count patches
         h, w = gt_img.shape[-2:]
@@ -78,9 +81,12 @@ def compute_patch_fid(
         n_pairs += 1
 
     if missing:
-        print("[FID] Skipping %d missing pair(s): %s" % (len(missing), missing[:5] if len(missing) > 5 else missing))
-    # print("[FID] Images used: %d" % n_pairs)
-    # print("[FID] Total patches: %d" % total_patches)
+        print("[FID] Skipping %d missing pair(s): %s" % (len(missing), missing if len(missing) <= 10 else missing[:10]))
+    if resized:
+        print("[FID] Resized %d ref image(s) to match decomp: %s" % (len(resized), resized if len(resized) <= 10 else resized[:10]))
+    if not missing and not resized:
+        print("[FID] All %d image pairs found" % n_pairs)
+    print("[FID] Images used: %d, total patches: %d" % (n_pairs, total_patches))
 
     if n_pairs == 0:
         print("[FID] No valid image pairs — returning NaN")
@@ -100,7 +106,14 @@ def compute_patch_fid(
     #     print("[FID] Could not access internal feature tensors:", e)
 
 
-    fid_value = float(FID.compute().item())
-    print(f"[FID] Final FID: {fid_value}")
-
-    return fid_value
+    try:
+        fid_value = float(FID.compute().item())
+        if fid_value != fid_value:  # NaN check
+            print("[FID] FID.compute() returned NaN (e.g. too few patches or numerical issue)")
+        print(f"[FID] Final FID: {fid_value}")
+        return fid_value
+    except Exception as e:
+        print("[FID] FID.compute() failed: %s" % e)
+        import traceback
+        traceback.print_exc()
+        return float("nan")

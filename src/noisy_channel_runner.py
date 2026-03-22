@@ -112,9 +112,10 @@ class MetricsComputer:
     def _get_pyiqa_metric(self, name: str):
         """Create a pyiqa metric. Load pkg_resources first so pyiqa's imports see it."""
         try:
+            import setuptools  # noqa: F401 - ensure setuptools in sys.modules so pkg_resources is findable
             import pkg_resources  # noqa: F401 - pyiqa depends on it; load first
-        except ImportError:
-            return None, "pkg_resources not found (install setuptools)"
+        except ImportError as e:
+            return None, "pkg_resources not found (install setuptools): %s" % e
         try:
             from pyiqa import create_metric
             return create_metric(name, device=self.device), None
@@ -207,7 +208,10 @@ class MetricsComputer:
                     dataset_name=dataset_name,
                 )
             )
-        except Exception:
+        except Exception as e:
+            print("[Metrics] FID computation failed: %s" % e)
+            import traceback
+            traceback.print_exc()
             return None
 
 
@@ -410,12 +414,16 @@ class NoisyChannelExperiment:
                         if first_decomp_error:
                             msg += " First error: %s" % first_decomp_error
                         print(msg)
+                    # Debug: log trial_folder contents before FID
+                    n_in_trial = sum(1 for f in os.listdir(trial_folder) if f.lower().endswith((".png", ".jpg", ".jpeg"))) if os.path.isdir(trial_folder) else 0
+                    print("[FID] BER=%s trial=%d: %d images in trial_folder" % (ber, trial, n_in_trial))
                     fid_val = self.metrics.fid(
                         os.path.abspath(self.dataset_path),
                         os.path.abspath(trial_folder),
                         image_files=self.image_files,
                         dataset_name=dataset_name,
                     )
+                    print("[FID] BER=%s trial=%d: fid_val=%s" % (ber, trial, fid_val))
                     fid_rows.append((ber, trial, fid_val if fid_val is not None else float("nan")))
                     if os.path.isdir(trial_folder):
                         shutil.rmtree(trial_folder, ignore_errors=True)

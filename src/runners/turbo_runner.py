@@ -3,6 +3,13 @@ import shutil
 import sys
 from typing import Any, Dict, Optional
 
+# Ensure Turbo-DDCM is on path (subprocesses importing runners don't inherit main process sys.path)
+_runner_dir = os.path.dirname(os.path.abspath(__file__))
+_project_root = os.path.dirname(os.path.dirname(_runner_dir))
+_turbo_path = os.path.join(_project_root, "Turbo-DDCM-master")
+if _turbo_path not in sys.path:
+    sys.path.insert(0, _turbo_path)
+
 import turbo_ddcm.utils as turbo_utils
 from .base import BaseModelRunner, list_png_sorted
 

@@ -14,5 +14,6 @@ __all__ = [
     "DdcmModelRunner",
     "TurboModelRunner",
     "DiffCRunner",
-    "ILLMRunner"
+    "ILLMRunner",
+    "StableCodecRunner",
 ]

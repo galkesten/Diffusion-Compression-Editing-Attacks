@@ -32,16 +32,17 @@ dependencies:
   - matplotlib
   - seaborn
   - jupyterlab
-  - setuptools
+  - "setuptools>=60,<81"  # pkg_resources deprecated in 81+; pyiqa (NIQE, LPIPS) needs it
   - pip
   - pip:
+    - "setuptools>=60,<81"  # avoid deprecation warning, keep pkg_resources for pyiqa
     # DiffC
     - "cupy-cuda12x<14"
     - pyyaml
     - easydict
     - setuptools-rust
-    # ILLM (MS-ILLM)
-    - neuralcompression
+    # ILLM (MS-ILLM): install from GitHub so zoo includes msillm_quality_vlo1/vlo2 (torch.hub hubconf requires them)
+    - git+https://github.com/facebookresearch/NeuralCompression.git
     # StableCodec
     - compressai
     - einops

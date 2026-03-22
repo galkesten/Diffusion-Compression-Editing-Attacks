@@ -161,6 +161,8 @@ def main(args):
         config = edict(yaml.safe_load(f))
     config.recon_timestep = args.recon_timestep
 
+    assert config.manual_dkl_per_step is not None, "Config must specify manual_dkl_per_step for encoding (used by both compress and decompress)."
+
     # Set up output directory
     output_dir = Path(args.output_dir)
     output_dir.mkdir(exist_ok=True, parents=True)

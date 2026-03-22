@@ -1,12 +1,24 @@
 from lib.models.SD import SDModel
 import torch
 
+# Try mirror first (avoids 404; stabilityai deprecated). Fall back to legacy for users with cached models.
+SD21_MODEL_IDS = [
+    "sd2-community/stable-diffusion-2-1",  # mirror (stabilityai deprecated)
+    "stabilityai/stable-diffusion-2-1",
+]
+
 
 class SD21Model(SDModel):
     def __init__(self, device="cuda", dtype=torch.float16):
-        super().__init__(
-            model_id="stabilityai/stable-diffusion-2-1", device=device, dtype=dtype
-        )
+        last_error = None
+        for model_id in SD21_MODEL_IDS:
+            try:
+                super().__init__(model_id=model_id, device=device, dtype=dtype)
+                return
+            except Exception as e:
+                last_error = e
+                continue
+        raise last_error
 
     def _get_noise_pred(self, latent_model_input, timestep, encoder_hidden_states):
         """

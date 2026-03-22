@@ -15,6 +15,9 @@ def decode(
     ):
     """Decodes a compressed image representation back into its latent space form.
 
+    Dkl_per_step must be config.manual_dkl_per_step from the config file (the .diffc
+    format does not store DKL; both encode and decode use the configured values).
+
     Args:
         latent_shape (torch.Size): Shape of the target latent tensor to be reconstructed.
         timestep_schedule (List[float]): List of timesteps in decreasing order.
@@ -24,7 +27,7 @@ def decode(
         chunk_seeds_per_step (List[List[int]]): Compressed representation of the image,
             consisting of lists of integer seeds for each denoising step.
         Dkl_per_step (List[float]): List of Kullback-Leibler divergence values per step,
-            used to reconstruct the denoising process.
+            used to reconstruct the denoising process. Must be config.manual_dkl_per_step.
         seed (int): Random seed for reproducibility of the denoising process.
 
     Returns:
@@ -32,6 +35,10 @@ def decode(
             through progressive denoising steps guided by the compressed representation.
     """
 
+
+    assert Dkl_per_step is not None and len(Dkl_per_step) > 0, (
+        "Dkl_per_step must be config.manual_dkl_per_step from the config (not computed)."
+    )
 
     device = noise_prediction_model.device
     dtype = noise_prediction_model.dtype
