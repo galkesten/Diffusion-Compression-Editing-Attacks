@@ -15,7 +15,11 @@ py-sbatch.sh
 jupyter-lab.sh
 commands.txt
 pyrightconfig.json
-
+py-sbatch-h200.sh
+scripts/download_stablecodec_ckpts.py
+scripts/download_stablecodec_ckpts.sh
+scripts/setup_stablecodec_env.sh
+scripts/test_stablecodec_one_image.py
 # IDE
 .vscode/
 .idea/
