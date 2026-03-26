@@ -131,7 +131,7 @@ class DiffCRunner(BaseModelRunner):
             args = SimpleNamespace(input_dir=compressed_dir, output_dir=compressed_dir, config=config_dir,
                                    input_path=None)
             diffc_decompress(args)
-        except Exception as exc:
+        except BaseException as exc:
             for image_file in image_names:
                 errors[image_file] = str(exc)
 
